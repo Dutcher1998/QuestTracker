@@ -1,0 +1,2333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>DeRuyter Quest Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Pro:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --M:#6B1A2A;--MD:#3D0A14;--ML:#8B2A3E;--MP:#F8EDEF;
+  --G:#5A5A5A;--GL:#E8E8E8;--GP:#F2F2F2;--GM:#A0A0A0;
+  --W:#FFFFFF;--GO:#C9923A;--GOL:#E8C97A;--GOP:#FDF6E8;
+  --INK:#1A1A1A;--INK3:#777;
+  --BD:rgba(107,26,42,0.15);--BDG:rgba(0,0,0,0.09);
+  --R:8px;--RL:14px;--SH:rgba(107,26,42,0.1);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Crimson Pro',Georgia,serif;background:var(--GP);color:var(--INK);min-height:100vh;}
+.cinzel{font-family:'Cinzel',serif;}
+.btn{padding:8px 16px;border-radius:var(--R);border:1px solid var(--BDG);font-family:'Cinzel',serif;font-size:11px;cursor:pointer;transition:all .15s;letter-spacing:.3px;}
+.bm{background:var(--M);color:var(--W);border-color:var(--M);}.bm:hover{background:var(--MD);}
+.bo{background:transparent;color:var(--INK);border-color:var(--BDG);}.bo:hover{background:var(--GL);}
+.bg{background:transparent;color:var(--M);border-color:var(--BD);}.bg:hover{background:var(--MP);}
+.bgold{background:var(--GO);color:var(--W);border-color:var(--GO);}.bgold:hover{background:#A07020;}
+.bd{color:#8B1A1A;border-color:#F0A0A0;background:transparent;}.bd:hover{background:#FEF0F0;}
+.bgreen{background:#1A6B2A;color:var(--W);border-color:#1A6B2A;}.bgreen:hover{background:#0F4A1A;}
+.bsm{font-size:11px;padding:5px 11px;}.bxs{font-size:10px;padding:4px 9px;}
+
+/* SETUP */
+#SS{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:2rem;background:linear-gradient(135deg,var(--MD) 0%,#5A0A1A 50%,var(--MD) 100%);position:relative;overflow:hidden;}
+#SS::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(201,146,58,.04) 40px,rgba(201,146,58,.04) 41px),repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(201,146,58,.04) 40px,rgba(201,146,58,.04) 41px);}
+.sc{background:var(--W);border-radius:var(--RL);padding:2.5rem;max-width:460px;width:100%;box-shadow:0 12px 48px rgba(0,0,0,.4);position:relative;border-top:4px solid var(--GO);}
+.sc h1{font-family:'Cinzel',serif;font-size:22px;color:var(--MD);margin-bottom:6px;text-align:center;}
+.sc p{font-size:14px;color:var(--INK3);margin-bottom:1.5rem;line-height:1.65;text-align:center;}
+.sn{background:var(--GOP);border:1px solid rgba(201,146,58,.3);border-radius:var(--R);padding:12px 14px;font-size:13px;color:#7A5500;margin-bottom:1.5rem;line-height:1.6;}
+.br{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+.orn{text-align:center;color:var(--GO);opacity:.4;font-size:18px;margin:4px 0;letter-spacing:8px;}
+
+/* APP */
+#app{display:none;flex-direction:column;min-height:100vh;}
+.ah{background:var(--MD);color:var(--W);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:56px;border-bottom:3px solid var(--GO);position:sticky;top:0;z-index:50;}
+.ab{display:flex;align-items:center;gap:10px;}
+.at{font-family:'Cinzel',serif;font-size:15px;color:var(--GOL);letter-spacing:1px;}
+.as{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:.5px;font-family:'Cinzel',serif;}
+.hr2{display:flex;align-items:center;gap:8px;}
+.up{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.08);padding:3px 12px 3px 3px;border-radius:20px;font-size:12px;color:rgba(255,255,255,.8);}
+.uav{width:28px;height:28px;border-radius:50%;object-fit:cover;border:2px solid var(--GO);}
+.vt{display:flex;gap:2px;background:rgba(0,0,0,.25);padding:3px;border-radius:var(--R);}
+.vtb{font-size:11px;padding:4px 11px;border-radius:6px;border:none;cursor:pointer;font-family:'Cinzel',serif;background:transparent;color:rgba(255,255,255,.5);letter-spacing:.3px;}
+.vtb.active{background:var(--GO);color:var(--MD);font-weight:600;}
+.so{font-size:11px;padding:4px 10px;border-radius:var(--R);border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(255,255,255,.5);cursor:pointer;font-family:'Cinzel',serif;}
+.so:hover{background:rgba(255,255,255,.08);}
+
+/* HERO */
+.hb{background:linear-gradient(135deg,var(--MD),#5A0A1A);padding:20px 24px;border-bottom:2px solid var(--GO);display:flex;align-items:center;gap:20px;position:relative;overflow:hidden;}
+.hb::after{content:'';position:absolute;right:-20px;top:-20px;width:140px;height:140px;border-radius:50%;background:rgba(201,146,58,.05);}
+.htx h2{font-family:'Cinzel',serif;font-size:17px;color:var(--GOL);margin-bottom:3px;}
+.htx p{font-size:13px;color:rgba(255,255,255,.5);}
+.hst{display:flex;gap:16px;margin-left:auto;}
+.hsv{font-family:'Cinzel',serif;font-size:22px;color:var(--GOL);}
+.hsl{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:.5px;}
+.hdv{width:1px;background:rgba(255,255,255,.1);align-self:stretch;}
+
+/* TABS */
+#TV{padding:0;width:100%;}
+.tb{display:flex;border-bottom:2px solid var(--BDG);background:var(--W);padding:0 20px;position:sticky;top:56px;z-index:40;overflow-x:auto;}
+.tab{font-family:'Cinzel',serif;font-size:11px;padding:12px 14px;border:none;background:transparent;color:var(--INK3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;letter-spacing:.4px;white-space:nowrap;}
+.tab.active{color:var(--M);border-bottom-color:var(--M);font-weight:600;}
+.tab:hover{color:var(--INK);}
+.pnl{display:none;padding:20px;}.pnl.active{display:block;}
+
+/* CARDS */
+.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:10px;margin-bottom:1.5rem;}
+.sc2{background:var(--W);border:1px solid var(--BDG);border-radius:var(--RL);padding:12px 14px;cursor:pointer;transition:all .15s;box-shadow:0 1px 3px var(--SH);position:relative;}
+.sc2:hover{border-color:var(--M);box-shadow:0 3px 10px var(--SH);}
+.sc2.sel{border:2px solid var(--M);background:var(--MP);}
+.sc2-menu{position:absolute;top:8px;right:8px;background:var(--M);color:var(--W);border:none;border-radius:4px;font-size:10px;padding:3px 7px;cursor:pointer;font-family:'Cinzel',serif;opacity:0;transition:opacity .15s;}
+.sc2:hover .sc2-menu{opacity:1;}
+.sct{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.av{width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid rgba(255,255,255,.6);}
+.av-text{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:12px;font-weight:700;flex-shrink:0;border:2px solid rgba(255,255,255,.6);}
+.sn2{font-size:13px;font-weight:500;color:var(--INK);line-height:1.3;}
+.sr{font-size:11px;margin-top:1px;}
+.xbw{height:5px;background:var(--GL);border-radius:3px;overflow:hidden;margin-bottom:4px;}
+.xb{height:100%;border-radius:3px;transition:width .5s;}
+.xl{font-size:11px;color:var(--INK3);}
+.br2{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;}
+.bdg{font-size:10px;padding:2px 7px;border-radius:20px;}
+
+/* STAT */
+.stg{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1.5rem;}
+.stc{background:var(--W);border:1px solid var(--BDG);border-radius:var(--R);padding:14px;text-align:center;border-top:3px solid var(--M);box-shadow:0 1px 4px var(--SH);}
+.stv{font-family:'Cinzel',serif;font-size:22px;color:var(--M);}
+.stl{font-size:12px;color:var(--INK3);margin-top:2px;}
+.sl{font-family:'Cinzel',serif;font-size:10px;color:var(--G);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;}
+
+/* AWARD */
+.aws{background:var(--W);border:1px solid var(--BDG);border-radius:var(--RL);padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 3px var(--SH);}
+.aws h3{font-family:'Cinzel',serif;font-size:12px;color:var(--MD);margin-bottom:10px;letter-spacing:.5px;}
+.xbg{display:flex;gap:8px;flex-wrap:wrap;}
+.xbtn{font-size:12px;padding:8px 14px;border-radius:var(--R);border:1px solid var(--M);color:var(--M);cursor:pointer;background:transparent;font-family:'Cinzel',serif;transition:all .15s;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:100px;}
+.xbtn:hover{background:var(--M);color:var(--W);}
+.xbtn-name{font-size:12px;text-align:center;}
+.xbtn-xp{font-size:11px;opacity:.7;}
+.cr{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.fi{padding:8px 12px;border:1px solid var(--BDG);border-radius:var(--R);font-size:14px;font-family:'Crimson Pro',serif;background:var(--W);color:var(--INK);}
+.fi:focus{outline:none;border-color:var(--M);}
+
+/* LB */
+.lbl{display:flex;flex-direction:column;gap:6px;}
+.lbr{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--W);border:1px solid var(--BDG);border-radius:var(--R);cursor:pointer;transition:all .15s;box-shadow:0 1px 3px var(--SH);}
+.lbr:hover{border-color:var(--M);}
+.lbr.g{border-left:4px solid #C9A84C;}
+.lbr.s{border-left:4px solid #A0A0A0;}
+.lbr.b{border-left:4px solid #B07A40;}
+.lbp{font-family:'Cinzel',serif;font-size:14px;color:var(--GM);width:28px;text-align:center;}
+.lbn{font-size:14px;font-weight:500;color:var(--INK);flex:1;}
+.lbt{font-size:11px;padding:2px 9px;border-radius:20px;}
+.lbx{font-family:'Cinzel',serif;font-size:14px;color:var(--M);}
+
+/* CLASS VS CLASS */
+.cvc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:1.5rem;}
+.cvc-card{background:var(--W);border:1px solid var(--BDG);border-radius:var(--RL);padding:1rem;text-align:center;box-shadow:0 1px 4px var(--SH);}
+.cvc-rank{font-family:'Cinzel',serif;font-size:28px;color:var(--GO);}
+.cvc-name{font-family:'Cinzel',serif;font-size:13px;color:var(--MD);margin:4px 0;}
+.cvc-xp{font-family:'Cinzel',serif;font-size:18px;color:var(--M);}
+.cvc-sub{font-size:11px;color:var(--INK3);margin-top:2px;}
+.cvc-bar-wrap{height:6px;background:var(--GL);border-radius:3px;overflow:hidden;margin-top:8px;}
+.cvc-bar{height:100%;border-radius:3px;background:var(--M);}
+
+/* LOG */
+.ll{display:flex;flex-direction:column;gap:5px;max-height:460px;overflow-y:auto;}
+.li{font-size:13px;color:var(--INK3);padding:7px 12px;background:var(--W);border:1px solid var(--BDG);border-radius:var(--R);display:flex;justify-content:space-between;gap:10px;border-left:3px solid var(--GL);}
+.li.xp{border-left-color:var(--M);}
+.li.level{border-left-color:var(--GO);}
+.li.badge{border-left-color:#5A3A6B;}
+.li.event{border-left-color:#1A6B2A;}
+.lt{font-size:11px;color:var(--GM);white-space:nowrap;}
+
+/* SETTINGS */
+.st2{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:1rem;}
+.st2 th{font-family:'Cinzel',serif;font-size:10px;letter-spacing:.5px;color:var(--G);padding:8px 10px;border-bottom:2px solid var(--BDG);text-align:left;background:var(--GP);}
+.st2 td{padding:6px 8px;border-bottom:1px solid var(--BDG);vertical-align:middle;}
+.st2 tr:last-child td{border-bottom:none;}
+.st2 input{border:1px solid var(--BDG);border-radius:6px;padding:4px 8px;font-size:13px;font-family:'Crimson Pro',serif;background:var(--W);color:var(--INK);width:100%;}
+.st2 input:focus{outline:none;border-color:var(--M);}
+.pe{display:flex;flex-direction:column;gap:6px;}
+.pr{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);}
+.par{display:flex;gap:8px;margin-top:8px;}
+
+/* QUEST BOARD */
+.qb-grid{display:flex;flex-direction:column;gap:8px;}
+.qb-item{background:var(--W);border:1px solid var(--BDG);border-radius:var(--R);padding:12px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px var(--SH);}
+.qb-icon{font-size:24px;flex-shrink:0;}
+.qb-body{flex:1;}
+.qb-title{font-family:'Cinzel',serif;font-size:13px;color:var(--MD);}
+.qb-desc{font-size:12px;color:var(--INK3);margin-top:2px;}
+.qb-xp{font-family:'Cinzel',serif;font-size:14px;color:var(--M);flex-shrink:0;}
+.qb-deadline{font-size:11px;color:var(--GM);margin-top:2px;}
+.qb-active{border-left:3px solid var(--GO);}
+.qb-expired{opacity:.5;}
+
+/* PILLS */
+.cp{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1rem;}
+.pill{font-size:11px;padding:5px 14px;border-radius:20px;border:1px solid var(--BD);cursor:pointer;font-family:'Cinzel',serif;background:var(--W);color:var(--M);transition:all .15s;user-select:none;}
+.pill:hover{background:var(--MP);border-color:var(--M);}
+.pill.active{background:var(--M);color:var(--W);border-color:var(--M);font-weight:600;box-shadow:0 2px 6px var(--SH);}
+
+/* BANNER */
+.eb{background:var(--GOP);border:1px solid rgba(201,146,58,.3);padding:10px 20px;font-size:13px;color:#7A5500;font-family:'Cinzel',serif;letter-spacing:.3px;border-bottom:1px solid rgba(201,146,58,.2);align-items:center;justify-content:space-between;}
+.undo-btn{font-size:11px;padding:3px 10px;border-radius:var(--R);border:1px solid #B07A00;background:transparent;color:#7A5500;cursor:pointer;font-family:'Cinzel',serif;}
+.undo-btn:hover{background:rgba(180,120,0,.1);}
+
+/* RANK CARDS */
+.rb{display:flex;gap:8px;margin-bottom:1.5rem;overflow-x:auto;padding-bottom:4px;}
+.rc{flex:1;min-width:110px;border-radius:var(--R);padding:10px;text-align:center;border:1px solid var(--BDG);}
+.rci{font-size:20px;margin-bottom:4px;}
+.rcn{font-family:'Cinzel',serif;font-size:11px;letter-spacing:.3px;}
+.rcr{font-size:11px;margin-top:2px;opacity:.65;}
+
+/* ADD ROW */
+.ar{display:flex;gap:8px;margin-bottom:1rem;}
+.ar .fi{flex:1;}
+
+/* MODAL */
+.mo{position:fixed;inset:0;background:rgba(26,10,14,.6);display:flex;align-items:center;justify-content:center;z-index:200;padding:1rem;}
+.md{background:var(--W);border-radius:var(--RL);width:100%;max-width:540px;max-height:92vh;overflow-y:auto;box-shadow:0 12px 48px rgba(0,0,0,.35);}
+.mh{padding:1.25rem 1.5rem;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,var(--MD),#5A0A1A);border-radius:var(--RL) var(--RL) 0 0;}
+.mh h2{font-family:'Cinzel',serif;font-size:17px;color:var(--GOL);}
+.mc{background:none;border:none;font-size:20px;color:rgba(255,255,255,.5);cursor:pointer;}
+.mc:hover{color:var(--W);}
+.mb{padding:1.5rem;}
+.dh{display:flex;align-items:center;gap:16px;margin-bottom:1.5rem;}
+.daw{position:relative;}
+.da{width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid var(--W);box-shadow:0 2px 8px var(--SH);}
+.da-text{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:22px;font-weight:700;border:3px solid var(--W);box-shadow:0 2px 8px var(--SH);}
+.rrib{position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);font-size:9px;padding:2px 7px;border-radius:20px;white-space:nowrap;font-family:'Cinzel',serif;letter-spacing:.3px;}
+.dn{font-family:'Cinzel',serif;font-size:18px;color:var(--MD);}
+.drt{font-size:14px;margin-top:3px;}
+.dxs{margin-bottom:1.25rem;background:var(--GP);border-radius:var(--R);padding:12px;}
+.dxb{height:10px;background:var(--GL);border-radius:5px;overflow:hidden;margin:8px 0;}
+.dxbar{height:100%;border-radius:5px;}
+.dst{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1.25rem;}
+.dsc{background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:10px;text-align:center;}
+.dsv{font-family:'Cinzel',serif;font-size:18px;color:var(--M);}
+.dsl{font-size:11px;color:var(--INK3);margin-top:2px;}
+.dst2{font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;color:var(--G);text-transform:uppercase;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--BDG);}
+.bgd{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.25rem;}
+.bch{font-size:12px;padding:5px 13px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;}
+.bl{opacity:.25;filter:grayscale(.5);}
+.dpi{display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--BDG);}
+.dpi:last-child{border-bottom:none;}
+.pc{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;}
+.pc.y{background:var(--MP);color:var(--M);}
+.pc.n{background:var(--GL);color:var(--GM);}
+.ma{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--BDG);display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.la{display:flex;align-items:center;gap:6px;margin-left:auto;}
+.lb2{width:28px;height:28px;border-radius:50%;border:1px solid var(--BD);background:transparent;color:var(--M);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.lb2:hover{background:var(--MP);}
+.lv2{font-family:'Cinzel',serif;font-size:13px;color:var(--INK);min-width:24px;text-align:center;}
+.xp-hist{max-height:140px;overflow-y:auto;margin-bottom:1rem;}
+.xp-hist-item{font-size:12px;color:var(--INK3);padding:4px 0;border-bottom:1px solid var(--BDG);display:flex;justify-content:space-between;}
+.xp-hist-item:last-child{border-bottom:none;}
+.xp-hist-amt{color:var(--M);font-family:'Cinzel',serif;}
+
+/* PROJECTOR VIEW */
+#PV{display:none;position:fixed;inset:0;background:var(--MD);z-index:300;flex-direction:column;overflow:hidden;}
+.pv-header{background:linear-gradient(135deg,var(--MD),#5A0A1A);border-bottom:3px solid var(--GO);padding:16px 32px;display:flex;align-items:center;justify-content:space-between;}
+.pv-title{font-family:'Cinzel',serif;font-size:28px;color:var(--GOL);letter-spacing:2px;}
+.pv-sub{font-size:14px;color:rgba(255,255,255,.5);font-family:'Cinzel',serif;}
+.pv-close{font-size:13px;padding:6px 14px;border-radius:var(--R);border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);cursor:pointer;font-family:'Cinzel',serif;}
+.pv-close:hover{background:rgba(255,255,255,.1);}
+.pv-body{flex:1;display:flex;flex-direction:column;padding:24px 32px;overflow:hidden;}
+.pv-filter{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+.pv-pill{font-size:12px;padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.2);cursor:pointer;font-family:'Cinzel',serif;background:transparent;color:rgba(255,255,255,.5);}
+.pv-pill.active{background:var(--GO);color:var(--MD);border-color:var(--GO);}
+.pv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;overflow-y:auto;flex:1;}
+.pv-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:var(--RL);padding:16px;display:flex;align-items:center;gap:12px;}
+.pv-card.top1{border-color:var(--GO);background:rgba(201,146,58,.1);}
+.pv-card.top2{border-color:#A0A0A0;background:rgba(160,160,160,.08);}
+.pv-card.top3{border-color:#B07A40;background:rgba(176,122,64,.08);}
+.pv-pos{font-family:'Cinzel',serif;font-size:22px;color:rgba(255,255,255,.3);width:32px;flex-shrink:0;}
+.pv-av{width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid rgba(255,255,255,.2);}
+.pv-av-text{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:16px;font-weight:700;flex-shrink:0;border:2px solid rgba(255,255,255,.2);}
+.pv-name{font-family:'Cinzel',serif;font-size:14px;color:rgba(255,255,255,.9);margin-bottom:2px;}
+.pv-rank{font-size:11px;color:rgba(255,255,255,.5);}
+.pv-xpbar-wrap{height:4px;background:rgba(255,255,255,.1);border-radius:2px;overflow:hidden;margin-top:6px;}
+.pv-xpbar{height:100%;border-radius:2px;}
+.pv-xp{font-family:'Cinzel',serif;font-size:16px;color:var(--GOL);margin-left:auto;flex-shrink:0;}
+.pv-ticker{background:rgba(0,0,0,.3);border-top:1px solid rgba(255,255,255,.08);padding:10px 32px;font-size:13px;color:var(--GOL);font-family:'Cinzel',serif;letter-spacing:.5px;white-space:nowrap;overflow:hidden;}
+.pv-ticker-inner{display:inline-block;}
+@keyframes ticker{0%{transform:translateX(100vw);}100%{transform:translateX(-100%);}}
+
+/* LEVEL-UP OVERLAY */
+#LUO{display:none;position:fixed;inset:0;background:rgba(61,10,20,.92);z-index:400;align-items:center;justify-content:center;flex-direction:column;}
+.luo-inner{text-align:center;animation:luPop .5s ease-out;}
+@keyframes luPop{0%{transform:scale(.5);opacity:0;}70%{transform:scale(1.05);}100%{transform:scale(1);opacity:1;}}
+.luo-icon{font-size:80px;margin-bottom:16px;}
+.luo-title{font-family:'Cinzel',serif;font-size:40px;color:var(--GOL);margin-bottom:8px;letter-spacing:2px;}
+.luo-name{font-family:'Cinzel',serif;font-size:24px;color:var(--W);margin-bottom:8px;}
+.luo-rank{font-size:18px;color:rgba(255,255,255,.6);}
+.luo-confetti{position:fixed;inset:0;pointer-events:none;}
+.conf-piece{position:absolute;width:10px;height:10px;border-radius:2px;animation:confFall 2s ease-in forwards;}
+@keyframes confFall{0%{transform:translateY(-20px) rotate(0deg);opacity:1;}100%{transform:translateY(110vh) rotate(720deg);opacity:0;}}
+
+/* SEASON RESET */
+.reset-warn{background:#FEF0F0;border:1px solid #F0A0A0;border-radius:var(--R);padding:12px 16px;font-size:13px;color:#8B1A1A;margin-bottom:1rem;}
+
+/* STUDENT VIEW */
+#SV{display:none;width:100%;background:var(--GP);scroll-margin-top:0;}
+html,body{scroll-behavior:auto;}
+.shc{background:linear-gradient(135deg,var(--MD),#5A0A1A);border-radius:var(--RL);padding:2rem;text-align:center;margin-bottom:1.5rem;position:relative;overflow:hidden;box-shadow:0 4px 16px var(--SH);}
+.shc::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,transparent,transparent 20px,rgba(201,146,58,.03) 20px,rgba(201,146,58,.03) 21px);}
+.sha{width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid var(--GO);position:relative;z-index:1;display:block;}
+.sha-text{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:28px;font-weight:700;border:3px solid var(--GO);position:relative;z-index:1;}
+.shc-av-wrap{display:flex;justify-content:center;margin-bottom:1rem;}
+.shn{font-family:'Cinzel',serif;font-size:22px;color:var(--GOL);margin-bottom:4px;position:relative;z-index:1;}
+.shr{font-size:14px;margin-bottom:1rem;position:relative;z-index:1;}
+.hxw{height:10px;background:rgba(255,255,255,.15);border-radius:5px;overflow:hidden;margin:8px auto;max-width:340px;position:relative;z-index:1;}
+.hxb{height:100%;border-radius:5px;}
+.hxl{font-size:13px;color:rgba(255,255,255,.55);position:relative;z-index:1;}
+.ssg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:1.5rem;}
+.ss{background:var(--W);border:1px solid var(--BDG);border-radius:var(--RL);padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 4px var(--SH);}
+.ss h2{font-family:'Cinzel',serif;font-size:13px;color:var(--MD);margin-bottom:1rem;letter-spacing:.5px;padding-bottom:8px;border-bottom:2px solid var(--MP);}
+.slr{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--BDG);font-size:14px;}
+.slr:last-child{border-bottom:none;}
+.slr.me{background:var(--MP);margin:0 -12px;padding:7px 12px;border-radius:var(--R);}
+.slp{font-family:'Cinzel',serif;font-size:12px;color:var(--GM);width:24px;}
+.sln{flex:1;color:var(--INK);}
+.slv{font-size:12px;}
+.slx{font-family:'Cinzel',serif;font-size:13px;color:var(--M);}
+.ps{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--BDG);font-size:13px;}
+.ps:last-child{border-bottom:none;}
+.nfm{text-align:center;padding:3rem;background:var(--W);border-radius:var(--RL);border:1px solid var(--BDG);box-shadow:0 2px 8px var(--SH);}
+.nfm h2{font-family:'Cinzel',serif;font-size:16px;color:var(--MD);margin-bottom:8px;}
+.sq-item{background:var(--W);border:1px solid var(--BDG);border-radius:var(--R);padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;}
+.sq-icon{font-size:20px;flex-shrink:0;}
+.sq-title{font-family:'Cinzel',serif;font-size:13px;color:var(--MD);}
+.sq-desc{font-size:12px;color:var(--INK3);margin-top:2px;}
+.sq-xp{font-family:'Cinzel',serif;font-size:14px;color:var(--M);margin-left:auto;flex-shrink:0;}
+.assign-item{font-size:12px;padding:6px 10px;background:var(--W);border:1px solid var(--BDG);border-radius:var(--R);border-left:3px solid var(--GO);}
+.assign-item.error{border-left-color:#F0A0A0;}
+.assign-item.info{border-left-color:var(--GM);}
+.auto-award-item{font-size:12px;padding:7px 12px;background:var(--W);border:1px solid var(--BDG);border-radius:var(--R);border-left:3px solid var(--M);display:flex;justify-content:space-between;gap:10px;}
+.auto-award-xp{font-family:'Cinzel',serif;color:var(--M);white-space:nowrap;}
+.flagged-item{font-size:12px;padding:8px 12px;background:#FEF9EC;border:1px solid rgba(201,146,58,.3);border-radius:var(--R);border-left:3px solid var(--GO);}
+.flagged-item strong{color:var(--MD);}
+.badge-tip{position:relative;display:inline-flex;align-items:center;}
+.badge-tip .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--MD);color:var(--W);font-size:11px;padding:5px 9px;border-radius:6px;white-space:nowrap;z-index:10;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.3);font-family:'Crimson Pro',serif;}
+.badge-tip .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:4px solid transparent;border-top-color:var(--MD);}
+.badge-tip:hover .tip{display:block;}
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="SS">
+  <div class="sc">
+    <div style="text-align:center;margin-bottom:1.25rem;">
+      <svg width="80" height="90" viewBox="0 0 80 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- rocket body -->
+        <path d="M40 6 C28 6 18 22 16 42 L24 44 L24 62 L40 70 L56 62 L56 44 L64 42 C62 22 52 6 40 6Z" fill="#6B1A2A" stroke="#C9923A" stroke-width="1.5"/>
+        <!-- nose cone -->
+        <path d="M40 6 C34 6 28 14 26 22 L40 18 L54 22 C52 14 46 6 40 6Z" fill="#C9923A"/>
+        <!-- window -->
+        <circle cx="40" cy="34" r="7" fill="#4A1020" stroke="#C9923A" stroke-width="1.5"/>
+        <circle cx="40" cy="34" r="4" fill="#C9923A" opacity=".3"/>
+        <!-- left fin -->
+        <path d="M24 50 L10 62 L20 62 L24 55Z" fill="#8B2A3E" stroke="#C9923A" stroke-width="1"/>
+        <!-- right fin -->
+        <path d="M56 50 L70 62 L60 62 L56 55Z" fill="#8B2A3E" stroke="#C9923A" stroke-width="1"/>
+        <!-- exhaust -->
+        <path d="M30 70 C32 78 34 84 40 88 C46 84 48 78 50 70Z" fill="#C9923A" opacity=".7"/>
+        <path d="M33 70 C34 76 36 80 40 84 C44 80 46 76 47 70Z" fill="#E8C97A" opacity=".8"/>
+        <!-- stripes -->
+        <line x1="24" y1="46" x2="56" y2="46" stroke="#C9923A" stroke-width="1" opacity=".4"/>
+        <line x1="24" y1="54" x2="56" y2="54" stroke="#C9923A" stroke-width="1" opacity=".4"/>
+      </svg>
+    </div>
+    <h1>DeRuyter Quest Tracker</h1>
+    <div class="orn">⸻ ✦ ⸻</div>
+    <p>Sign in with your school Google account. Teachers see the full dashboard. Students see their progress and the class leaderboard.</p>
+    <div class="sn">Sign in below. The app recognizes teachers vs. students automatically.</div>
+    <div class="br"><button class="btn bm" onclick="signIn()">Sign in with Google</button><button class="btn bo" onclick="demoMode()">Demo mode</button></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="ah">
+    <div class="ab">
+      <svg width="28" height="36" viewBox="0 0 80 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M40 6 C28 6 18 22 16 42 L24 44 L24 62 L40 70 L56 62 L56 44 L64 42 C62 22 52 6 40 6Z" fill="#4A1020" stroke="#C9923A" stroke-width="2"/>
+        <path d="M40 6 C34 6 28 14 26 22 L40 18 L54 22 C52 14 46 6 40 6Z" fill="#C9923A"/>
+        <circle cx="40" cy="34" r="7" fill="#3D0A14" stroke="#C9923A" stroke-width="2"/>
+        <path d="M24 50 L10 62 L20 62 L24 55Z" fill="#6B1A2A" stroke="#C9923A" stroke-width="1"/>
+        <path d="M56 50 L70 62 L60 62 L56 55Z" fill="#6B1A2A" stroke="#C9923A" stroke-width="1"/>
+        <path d="M30 70 C32 78 34 84 40 88 C46 84 48 78 50 70Z" fill="#C9923A" opacity=".8"/>
+        <path d="M33 70 C34 76 36 80 40 84 C44 80 46 76 47 70Z" fill="#E8C97A"/>
+      </svg>
+      <div><div class="at">Quest Tracker</div><div class="as">DeRuyter Central School</div></div>
+    </div>
+    <div class="hr2">
+      <div id="UP" class="up" style="display:none;"><img id="UAV" class="uav" src="" alt=""/><span id="UNL"></span></div>
+      <div id="VT" class="vt" style="display:none;">
+        <button class="vtb active" id="vt-t" onclick="switchView('teacher')">Teacher</button>
+        <button class="vtb" id="vt-s" onclick="onStudentViewClick()">Student</button>
+      </div>
+      <button class="btn bm bsm" onclick="openPV()" id="proj-btn" style="display:none;">📺 Projector</button>
+      <button class="so" onclick="signOut()">Sign out</button>
+    </div>
+  </div>
+
+  <div id="EB" class="eb" style="display:none;">
+    <span id="EB-msg"></span>
+    <button class="undo-btn" id="undo-btn" style="display:none;" onclick="undoLast()">↩ Undo</button>
+  </div>
+
+  <!-- VIEW CONTAINER -->
+  <div id="view-container" style="position:relative;flex:1;">
+  <!-- TEACHER VIEW -->
+  <div id="TV">
+    <div class="hb">
+      <div><div class="htx"><h2>Command Center</h2><p>Award XP, track ranks, manage your classes</p></div></div>
+      <div class="hst">
+        <div><div class="hsv" id="h-s">0</div><div class="hsl">Students</div></div>
+        <div class="hdv"></div>
+        <div><div class="hsv" id="h-a">0</div><div class="hsl">Avg Level</div></div>
+        <div class="hdv"></div>
+        <div><div class="hsv" id="h-g">0</div><div class="hsl">Generals+</div></div>
+      </div>
+    </div>
+    <div class="tb">
+      <button class="tab active" id="tab-roster" onclick="showTab('roster')">Roster</button>
+      <button class="tab" id="tab-award" onclick="showTab('award')">Award XP</button>
+      <button class="tab" id="tab-leaderboard" onclick="showTab('leaderboard')">Leaderboard</button>
+      <button class="tab" id="tab-cvc" onclick="showTab('cvc')">Class vs Class</button>
+      <button class="tab" id="tab-quests" onclick="showTab('quests')">Quest Board</button>
+      <button class="tab" id="tab-assignments" onclick="showTab('assignments')">📚 Assignments</button>
+      <button class="tab" id="tab-log" onclick="showTab('log')">Event Log</button>
+      <button class="tab" id="tab-settings" onclick="showTab('settings')">Settings</button>
+    </div>
+
+    <!-- ROSTER -->
+    <div class="pnl active" id="pnl-roster">
+      <div class="rb">
+        <div class="rc" style="background:#F2F2F2;border-color:#9A9A9A;"><div class="rci">🛡️</div><div class="rcn" style="color:#5A5A5A;">Recruit</div><div class="rcr" style="color:#5A5A5A;">Lv 1–4</div></div>
+        <div class="rc" style="background:#F0EAF5;border-color:#9A7AB0;"><div class="rci">⚔️</div><div class="rcn" style="color:#5A3A6B;">Soldier</div><div class="rcr" style="color:#5A3A6B;">Lv 5–9</div></div>
+        <div class="rc" style="background:#F8EDEF;border-color:#8B2A3E;"><div class="rci">🎖️</div><div class="rcn" style="color:#6B1A2A;">Captain</div><div class="rcr" style="color:#6B1A2A;">Lv 10–14</div></div>
+        <div class="rc" style="background:#F0E0E4;border-color:#6B1A2A;"><div class="rci">👑</div><div class="rcn" style="color:#3D0A14;">General</div><div class="rcr" style="color:#3D0A14;">Lv 15–20</div></div>
+      </div>
+      <div class="sl">Filter by class</div>
+      <div class="cp" id="cp-r"></div>
+      <div class="sl">Add student manually</div>
+      <div class="ar">
+        <input class="fi" id="nn" type="text" placeholder="Student name..." onkeydown="if(event.key==='Enter')addStudent()"/>
+        <select class="fi" id="nc" style="width:160px;"></select>
+        <button class="btn bm" onclick="addStudent()">Add</button>
+        <button class="btn bo bsm" onclick="syncGC()">Sync All Classes</button>
+      </div>
+      <div class="sl">Students</div>
+      <div class="sg" id="sg-r"></div>
+    </div>
+
+    <!-- AWARD XP -->
+    <div class="pnl" id="pnl-award">
+      <div class="aws">
+        <h3>Filter &amp; select students</h3>
+        <div class="cp" id="cp-a"></div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <button class="btn bo bsm" onclick="selAll()">Select all</button>
+          <button class="btn bo bsm" onclick="deselAll()">Deselect all</button>
+          <button class="btn bgold bsm" onclick="awardWholeClass()">Award whole filtered class</button>
+          <span style="font-size:12px;color:var(--INK3);align-self:center;" id="sc3">0 selected</span>
+        </div>
+        <div class="sg" id="sg-a"></div>
+      </div>
+      <div class="aws">
+        <h3>Award XP for...</h3>
+        <div class="xbg" id="xbg"></div>
+      </div>
+      <div class="aws">
+        <h3>Custom XP</h3>
+        <div class="cr">
+          <input class="fi" id="cx" type="number" min="1" max="999" placeholder="XP" style="width:90px;"/>
+          <input class="fi" id="cr2" type="text" placeholder="Reason (optional)" style="flex:1;"/>
+          <button class="btn bm" onclick="awardCustom()">Award</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEADERBOARD -->
+    <div class="pnl" id="pnl-leaderboard">
+      <div class="sl">Filter by class</div>
+      <div class="cp" id="cp-l"></div>
+      <div class="lbl" id="lb"></div>
+    </div>
+
+    <!-- CLASS VS CLASS -->
+    <div class="pnl" id="pnl-cvc">
+      <div class="sl">Total XP per class period</div>
+      <div class="cvc-grid" id="cvc-grid"></div>
+      <div class="sl">Per-class leaderboard</div>
+      <div class="lbl" id="cvc-lb"></div>
+    </div>
+
+    <!-- QUEST BOARD -->
+    <div class="pnl" id="pnl-quests">
+      <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;">
+        <button class="btn bm" onclick="openQuestModal()">+ Add Quest</button>
+        <span style="font-size:13px;color:var(--INK3);align-self:center;">Post weekly challenges students can see and earn XP from.</span>
+      </div>
+      <div class="qb-grid" id="qb-grid"></div>
+    </div>
+
+    <!-- ASSIGNMENTS -->
+    <div class="pnl" id="pnl-assignments">
+      <div class="aws">
+        <h3>Google Classroom assignment XP sync</h3>
+        <p style="font-size:13px;color:var(--INK3);margin-bottom:1rem;">Sync checks classes that have students in your roster and automatically awards XP. Each submission is tracked — re-syncing never double-awards.</p>
+        <div style="margin-bottom:1rem;">
+          <div class="sl" style="margin-bottom:6px;">Classes to sync</div>
+          <div class="cp" id="cp-assign" style="margin-bottom:4px;"></div>
+          <div style="font-size:11px;color:var(--INK3);">Only classes with students in your roster will appear. Select specific ones or leave all selected.</div>
+        </div>
+        <div style="margin-bottom:1rem;">
+          <div class="sl" style="margin-bottom:6px;">Marking period</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+            <select class="fi" id="gp-select" style="flex:1;min-width:180px;" onchange="onGPSelect()">
+              <option value="all">All assignments (no filter)</option>
+            </select>
+            <button class="btn bg bsm" onclick="openAddGP()">+ Save period</button>
+            <button class="btn bo bsm" onclick="manualFetchGP()">↻ From Classroom</button>
+            <button class="btn bd bxs" onclick="deleteGP()">Remove</button>
+            <button class="btn bm" onclick="syncAssignments()">🔄 Sync Assignments</button>
+            <button class="btn bo bsm" onclick="clearAwardedIds()">Clear history</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px;">
+            <div><div class="sl" style="margin-bottom:4px;">Start date</div><input class="fi" id="mp-start" type="date" style="width:100%;"/></div>
+            <div><div class="sl" style="margin-bottom:4px;">End date</div><input class="fi" id="mp-end" type="date" style="width:100%;"/></div>
+          </div>
+          <div style="font-size:11px;color:var(--INK3);">Click <strong>↻ From Classroom</strong> to attempt auto-loading your grading periods. If that fails, enter dates manually and click <strong>+ Save period</strong> to store them for reuse.</div>
+        </div>
+        <span id="assign-status" style="font-size:12px;color:var(--INK3);display:block;margin-bottom:8px;"></span>
+        <div id="assign-log" style="display:flex;flex-direction:column;gap:5px;max-height:180px;overflow-y:auto;margin-bottom:1rem;"></div>
+      </div>
+      <div class="aws" id="flagged-section" style="display:none;">
+        <h3>⚠️ Flagged assignments — review manually</h3>
+        <p style="font-size:13px;color:var(--INK3);margin-bottom:1rem;">These submissions could not be auto-awarded. Common reasons: no matching student in roster, ungraded, or category not configured.</p>
+        <div id="flagged-list" style="display:flex;flex-direction:column;gap:5px;max-height:300px;overflow-y:auto;"></div>
+      </div>
+      <div class="aws">
+        <h3>XP tiers — configure per category type</h3>
+        <p style="font-size:13px;color:var(--INK3);margin-bottom:1rem;">Category names must match Google Classroom grade categories exactly. Any assignment type not listed is skipped.</p>
+        <table class="st2" id="cat-table">
+          <thead><tr><th>Category name</th><th style="width:90px;">Submit XP</th><th style="width:90px;">85+ XP</th><th style="width:90px;">100 XP</th><th style="width:50px;"></th></tr></thead>
+          <tbody id="cat-tbody"></tbody>
+        </table>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <input class="fi" id="cat-name" type="text" placeholder="Category name..." style="flex:1;min-width:140px;"/>
+          <input class="fi" id="cat-sub" type="number" value="25" style="width:80px;" placeholder="Submit"/>
+          <input class="fi" id="cat-85" type="number" value="15" style="width:80px;" placeholder="85+"/>
+          <input class="fi" id="cat-100" type="number" value="25" style="width:80px;" placeholder="100"/>
+          <button class="btn bm" onclick="addCategory()">Add</button>
+        </div>
+        <p style="font-size:11px;color:var(--INK3);margin-top:8px;">Submit XP fires on turn-in regardless of grade. 85+ and 100 bonuses stack on top.</p>
+      </div>
+      <div class="aws">
+        <h3>Recent auto-awards</h3>
+        <div id="auto-award-log" style="display:flex;flex-direction:column;gap:5px;max-height:300px;overflow-y:auto;"></div>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="pnl" id="pnl-log">
+      <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;">
+        <button class="btn bo bsm" onclick="exportCSV()">Export Roster CSV</button>
+        <button class="btn bo bsm" onclick="exportReport()">Export XP Report</button>
+      </div>
+      <div class="ll" id="ll"></div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="pnl" id="pnl-settings">
+      <div class="aws">
+        <h3>XP required per level</h3>
+        <p style="font-size:13px;color:var(--INK3);margin-bottom:10px;">This table shows exactly how much XP is needed to reach each level and the total cumulative XP required.</p>
+        <div style="overflow-x:auto;">
+          <table class="st2" id="xp-level-table" style="min-width:400px;">
+            <thead><tr><th>Level</th><th>Rank</th><th>XP needed for this level</th><th>Total cumulative XP</th></tr></thead>
+            <tbody id="xp-level-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="aws">
+        <h3>XP Activities — edit name &amp; XP value</h3>
+        <table class="st2"><thead><tr><th>Activity name</th><th style="width:110px;">XP awarded</th><th style="width:60px;"></th></tr></thead><tbody id="atb"></tbody></table>
+        <button class="btn bg bsm" onclick="addActivity()">+ Add activity</button>
+      </div>
+      <div class="aws">
+        <h3>Privileges — edit rewards by level</h3>
+        <div class="pe" id="pe"></div>
+        <div class="par">
+          <input class="fi" id="npl" type="number" min="1" max="20" placeholder="Lv" style="width:72px;"/>
+          <input class="fi" id="npt" type="text" placeholder="Reward description..." style="flex:1;"/>
+          <button class="btn bm" onclick="addPriv()">Add</button>
+        </div>
+      </div>
+      <div class="aws">
+        <h3>Custom badges — create &amp; award</h3>
+        <p style="font-size:13px;color:var(--INK3);margin-bottom:1rem;">Create custom badges like "Master Mapper" and award them to individual students.</p>
+        <div id="cb-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <input class="fi" id="cb-icon" type="text" value="🗺️" style="width:60px;" placeholder="Icon"/>
+          <input class="fi" id="cb-label" type="text" placeholder="Badge name (e.g. Master Mapper)" style="flex:1;"/>
+          <input class="fi" id="cb-desc" type="text" placeholder="Description" style="flex:1;"/>
+          <button class="btn bm bsm" onclick="addCustomBadge()">Create</button>
+        </div>
+      </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div>
+            <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Clear synced roster</div>
+            <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Removes all students from the roster so you can re-sync from scratch. XP history and log are also cleared. Use this to fix a bad sync.</div>
+            <button class="btn bd" onclick="clearRoster()">Clear entire roster</button>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--BDG);"/>
+          <div>
+            <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Clear profile pictures</div>
+            <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Wipes all cached profile photos. Re-sync Google Classroom to re-fetch them.</div>
+            <button class="btn bo bsm" onclick="clearPics()">Clear all photos</button>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--BDG);"/>
+          <div>
+            <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Re-fetch profile photos</div>
+            <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Attempts to re-fetch profile photos for all synced students using the current Google session.</div>
+            <button class="btn bg bsm" onclick="refetchPhotos()">Re-fetch photos</button>
+          </div>
+        </div>
+      </div>
+        <div class="reset-warn">⚠️ This will reset all student XP to zero and levels to 1. Students keep their badges and will receive a permanent "Season Veteran" legacy badge. This cannot be undone.</div>
+        <button class="btn bd" onclick="seasonReset()">Reset Season</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STUDENT VIEW -->
+  <div id="SV"></div>
+  </div><!-- end view-container -->
+</div>
+
+<!-- STUDENT DETAIL MODAL -->
+<div id="MO" class="mo" style="display:none;" onclick="closeMO(event)">
+  <div class="md"><div class="mh"><h2 id="mt">Student</h2><button class="mc" onclick="closeMD()">✕</button></div><div class="mb" id="mb"></div></div>
+</div>
+
+<!-- QUEST MODAL -->
+<div id="QMO" class="mo" style="display:none;" onclick="closeQMO(event)">
+  <div class="md">
+    <div class="mh"><h2>Add Quest</h2><button class="mc" onclick="closeQMD()">✕</button></div>
+    <div class="mb">
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div><div class="sl">Quest title</div><input class="fi" id="q-title" type="text" placeholder="e.g. Primary Source Analysis" style="width:100%;"/></div>
+        <div><div class="sl">Description</div><textarea class="fi" id="q-desc" rows="2" placeholder="What do students need to do?" style="width:100%;resize:vertical;"></textarea></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <div><div class="sl">XP reward</div><input class="fi" id="q-xp" type="number" min="1" value="50" style="width:100%;"/></div>
+          <div><div class="sl">Icon (emoji)</div><input class="fi" id="q-icon" type="text" value="📜" style="width:100%;"/></div>
+          <div><div class="sl">Deadline (optional)</div><input class="fi" id="q-deadline" type="date" style="width:100%;"/></div>
+        </div>
+        <button class="btn bm" onclick="saveQuest()">Post Quest</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SYNC PICKER MODAL -->
+<div id="SYNC-MO" class="mo" style="display:none;" onclick="if(event.target===this)closeSyncMO()">
+  <div class="md" style="max-width:520px;">
+    <div class="mh"><h2>Select Classes to Sync</h2><button class="mc" onclick="closeSyncMO()">✕</button></div>
+    <div class="mb">
+      <p style="font-size:13px;color:var(--INK3);margin-bottom:1rem;">Select which Google Classroom courses to import. Courses with the same name are shown with their unique course ID so you can distinguish them.</p>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="btn bo bsm" onclick="syncSelectAll()">Select all</button>
+        <button class="btn bo bsm" onclick="syncSelectNone()">Select none</button>
+      </div>
+      <div id="sync-course-list" style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto;margin-bottom:1rem;"></div>
+      <button class="btn bm" onclick="doSync()">Sync Selected Classes</button>
+    </div>
+  </div>
+</div>
+
+<!-- STUDENT PREVIEW MODAL (teacher only) -->
+<div id="SPV-MO" class="mo" style="display:none;" onclick="if(event.target===this)closeSPV()">
+  <div class="md" style="max-width:400px;">
+    <div class="mh"><h2>Preview Student View</h2><button class="mc" onclick="closeSPV()">✕</button></div>
+    <div class="mb">
+      <p style="font-size:13px;color:var(--INK3);margin-bottom:1rem;">As the teacher, select any student to preview their view. This is what they see when they sign in.</p>
+      <input class="fi" id="spv-search" type="text" placeholder="Search student name..." style="width:100%;margin-bottom:10px;" oninput="renderSPVList()"/>
+      <div id="spv-list" style="display:flex;flex-direction:column;gap:4px;max-height:360px;overflow-y:auto;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PROJECTOR VIEW -->
+<div id="PV">
+  <div class="pv-header">
+    <div>
+      <div class="pv-title">⚔️ DeRuyter Quest Tracker</div>
+      <div class="pv-sub">Class Leaderboard — Live</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <div class="pv-filter" id="pv-filter"></div>
+      <button class="pv-close" onclick="closePV()">✕ Close</button>
+    </div>
+  </div>
+  <div class="pv-body">
+    <div class="pv-grid" id="pv-grid"></div>
+  </div>
+  <div class="pv-ticker"><span class="pv-ticker-inner" id="pv-ticker">Loading...</span></div>
+</div>
+
+<!-- LEVEL-UP OVERLAY -->
+<div id="LUO" style="display:none;position:fixed;inset:0;background:rgba(61,10,20,.92);z-index:400;align-items:center;justify-content:center;flex-direction:column;">
+  <canvas id="conf-canvas" style="position:fixed;inset:0;pointer-events:none;"></canvas>
+  <div style="text-align:center;animation:luPop .5s ease-out;position:relative;z-index:1;">
+    <div id="luo-icon" style="font-size:80px;margin-bottom:16px;"></div>
+    <div style="font-family:'Cinzel',serif;font-size:40px;color:var(--GOL);margin-bottom:8px;letter-spacing:2px;">LEVEL UP!</div>
+    <div id="luo-name" style="font-family:'Cinzel',serif;font-size:24px;color:var(--W);margin-bottom:8px;"></div>
+    <div id="luo-rank" style="font-size:18px;color:rgba(255,255,255,.6);"></div>
+    <button class="btn bo" onclick="closeLUO()" style="margin-top:24px;color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.2);">Continue</button>
+  </div>
+</div>
+
+<script>
+const GCL_ID='249246305432-o4ukh4lim7k2lfq6hlr3rked9ma5vhe2.apps.googleusercontent.com';
+const TEMAILS=['dutcher@deruytercentral.org'];
+
+const LVS=(()=>{const t=[0];for(let i=1;i<=20;i++)t.push(t[i-1]+Math.round(50*Math.pow(i,1.8)));return t;})();
+const RANKS=[
+  {min:1,max:4,name:'Recruit',icon:'🛡️',color:'#5A5A5A',bg:'#F2F2F2',bar:'#9A9A9A'},
+  {min:5,max:9,name:'Soldier',icon:'⚔️',color:'#5A3A6B',bg:'#F0EAF5',bar:'#9A7AB0'},
+  {min:10,max:14,name:'Captain',icon:'🎖️',color:'#6B1A2A',bg:'#F8EDEF',bar:'#8B2A3E'},
+  {min:15,max:20,name:'General',icon:'👑',color:'#3D0A14',bg:'#F0E0E4',bar:'#6B1A2A'}
+];
+const BADGES=[
+  {id:'fx',label:'First Blood',desc:'First XP',icon:'🩸',chk:s=>s.te>=1,bg:'#F8EDEF',tx:'#6B1A2A'},
+  {id:'c1',label:'Centurion',desc:'100 XP',icon:'💯',chk:s=>s.te>=100,bg:'#F0EAF5',tx:'#4A1A6B'},
+  {id:'v5',label:'Veteran',desc:'500 XP',icon:'🎗️',chk:s=>s.te>=500,bg:'#F0E0E4',tx:'#4A1020'},
+  {id:'sc',label:'Scholar',desc:'1000 XP',icon:'📜',chk:s=>s.te>=1000,bg:'#FDF6E8',tx:'#7A5500'},
+  {id:'sl',label:'Soldier',desc:'Reached Soldier',icon:'⚔️',chk:s=>s.lv>=5,bg:'#F0EAF5',tx:'#5A3A6B'},
+  {id:'cp',label:'Captain',desc:'Reached Captain',icon:'🎖️',chk:s=>s.lv>=10,bg:'#F8EDEF',tx:'#6B1A2A'},
+  {id:'gn',label:'General',desc:'Reached General',icon:'👑',chk:s=>s.lv>=15,bg:'#F0E0E4',tx:'#3D0A14'},
+  {id:'lg',label:'Legend',desc:'Level 20',icon:'⭐',chk:s=>s.lv>=20,bg:'#3D0A14',tx:'#E8C97A'},
+  {id:'sv',label:'Season Vet',desc:'Completed a season',icon:'🏛️',chk:s=>false,bg:'#FDF6E8',tx:'#7A5500'}
+];
+const AVC=[
+  {bg:'#F8EDEF',tx:'#6B1A2A'},{bg:'#EAEAEA',tx:'#3A3A3A'},
+  {bg:'#F0EAF5',tx:'#4A1A6B'},{bg:'#F0E0E4',tx:'#4A1020'},
+  {bg:'#EAF0F5',tx:'#1A3A6B'},{bg:'#EAF5EA',tx:'#1A6B2A'},
+  {bg:'#F5F0EA',tx:'#6B4A1A'},{bg:'#F5F5EA',tx:'#4A4A1A'}
+];
+const CEVS=[
+  {lv:10,msg:'A Captain has risen! Class earns 15 XP.',bonus:15},
+  {lv:15,msg:'A General commands the field! Class earns 25 XP.',bonus:25},
+  {lv:20,msg:'A Legend is born!',bonus:0}
+];
+const DACTS=[
+  {id:'a1',label:'Assignment complete',xp:25},
+  {id:'a2',label:'Assessment passed',xp:40},
+  {id:'a3',label:'Perfect score',xp:75},
+  {id:'a4',label:'Attendance bonus',xp:10},
+  {id:'a5',label:'Extra credit',xp:50},
+  {id:'a6',label:'Exemplary behavior',xp:20}
+];
+const DPRIVS=[
+  {level:5,text:'Sit anywhere in class for one day'},
+  {level:8,text:'Homework pass (one assignment)'},
+  {level:10,text:'Choose a class activity or game'},
+  {level:12,text:'Listen to music during independent work'},
+  {level:15,text:'Free period pass (10 minutes)'},
+  {level:18,text:'Name a future quiz question'},
+  {level:20,text:'Legendary status — class-wide bonus XP event'}
+];
+const DEMOS=[
+  {name:'Alex M.',cls:'Period 1'},{name:'Jordan T.',cls:'Period 1'},{name:'Casey R.',cls:'Period 1'},
+  {name:'Morgan L.',cls:'Period 2'},{name:'Riley S.',cls:'Period 2'},{name:'Avery K.',cls:'Period 2'},
+  {name:'Quinn P.',cls:'Period 3'},{name:'Blake H.',cls:'Period 3'},{name:'Dakota W.',cls:'Period 3'},
+  {name:'Sage N.',cls:'Period 1'}
+];
+
+let students=[],privs=[...DPRIVS.map(p=>({...p}))],acts=[...DACTS.map(a=>({...a}))],log=[],quests=[],customBadges=[];
+let awardedSubmissions={}; // {submissionId: true} — tracks already-awarded submissions
+let xpCategories=[
+  {name:'Assignment',sub:25,bonus85:15,bonus100:25},
+  {name:'Test',sub:0,bonus85:20,bonus100:40},
+  {name:'Quiz',sub:10,bonus85:10,bonus100:20}
+];
+let autoAwardLog=[];
+let selIds=new Set(),curUser=null,isT=false,curSid=null,gcToken=null,tclient=null;
+let rcls='All',acls='All',lcls='All',pvcls='All';
+let undoStack=null,undoTimer=null;
+let luQueue=[];
+
+function mkS(name,idx,cls){return{id:'s'+Date.now()+Math.random(),name,xp:0,lv:1,te:0,badges:[],ai:idx%AVC.length,gid:null,cls:cls||'General',pic:null,hist:[]};}
+function getCls(){return[...new Set(students.map(s=>s.cls).filter(Boolean))].sort();}
+function getRank(lv){return RANKS.find(r=>lv>=r.min&&lv<=r.max)||RANKS[0];}
+function lvFromXP(xp){let l=1;for(let i=1;i<=20;i++){if(xp>=LVS[i])l=i+1;else break;}return Math.min(l,20);}
+function xpIn(s){return s.xp-LVS[s.lv-1];}
+function xpNeed(lv){return LVS[lv]-LVS[lv-1];}
+function pct(s){if(s.lv>=20)return 100;return Math.round((xpIn(s)/xpNeed(s.lv))*100);}
+function ini(name){return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();}
+
+function chkBadges(s){
+  BADGES.forEach(b=>{
+    if(b.id==='sv')return;
+    if(!s.badges.includes(b.id)&&b.chk(s)){
+      s.badges.push(b.id);
+      addLog(`${s.name} earned "${b.label}" ${b.icon}`,'badge');
+    }
+  });
+}
+
+function awardXP(ids,amt,reason,skipUndo){
+  if(!ids.length){showEB('Select at least one student first.');return;}
+  if(!skipUndo){
+    undoStack={ids,amt,reason,snapshot:students.map(s=>({id:s.id,xp:s.xp,lv:s.lv,te:s.te,badges:[...s.badges],hist:[...s.hist||[]]}))};
+  }
+  let ups=[];
+  ids.forEach(id=>{
+    const s=students.find(x=>x.id==id);if(!s)return;
+    const prev=s.lv;
+    s.xp+=amt;s.te+=amt;s.lv=lvFromXP(s.xp);
+    if(!s.hist)s.hist=[];
+    s.hist.unshift({amt,reason:reason||'Manual',time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),date:new Date().toLocaleDateString()});
+    if(s.hist.length>200)s.hist.pop();
+    chkBadges(s);
+    addLog(`${s.name} +${amt} XP${reason?' ('+reason+')':''}`, 'xp');
+    if(s.lv>prev){addLog(`${s.name} → Level ${s.lv} — ${getRank(s.lv).name}! ${getRank(s.lv).icon}`,'level');ups.push({s,prev});}
+  });
+  ups.forEach(({s,prev})=>{
+    CEVS.forEach(e=>{
+      if(s.lv===e.lv){
+        showEB(e.msg);
+        if(e.bonus>0){students.forEach(x=>{if(x.id!==s.id){x.xp+=e.bonus;x.te+=e.bonus;x.lv=lvFromXP(x.xp);}});addLog(`Class-wide +${e.bonus} XP!`,'event');}
+      }
+    });
+    luQueue.push(s);
+  });
+  if(!skipUndo){showEB(`+${amt} XP awarded to ${ids.length} student${ids.length!==1?'s':''}`,true);}
+  processLUQueue();
+  save();render();
+}
+
+function undoLast(){
+  if(!undoStack)return;
+  const snap=undoStack.snapshot;
+  snap.forEach(ss=>{const s=students.find(x=>x.id==ss.id);if(s){s.xp=ss.xp;s.lv=ss.lv;s.te=ss.te;s.badges=ss.badges;s.hist=ss.hist;}});
+  addLog(`Last XP award undone.`,'event');
+  undoStack=null;
+  clearTimeout(undoTimer);
+  hideEB();
+  save();render();
+}
+
+function awardCustom(){
+  const amt=parseInt(document.getElementById('cx').value)||0;
+  const reason=document.getElementById('cr2').value||'';
+  if(amt<1){showEB('Enter a valid XP amount.');return;}
+  awardXP([...selIds],amt,reason);
+  document.getElementById('cx').value='';document.getElementById('cr2').value='';
+}
+
+function awardWholeClass(){
+  const list=filt(acls);
+  if(!list.length){showEB('No students in this class.');return;}
+  selIds=new Set(list.map(s=>s.id));
+  renderAwardGrid();
+  showEB(`${list.length} students selected. Now pick an activity above.`);
+}
+
+function addLog(msg,type){
+  const now=new Date();
+  log.unshift({msg,type,time:now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})});
+  if(log.length>200)log.pop();
+}
+
+function showEB(msg,showUndo){
+  const b=document.getElementById('EB');const m=document.getElementById('EB-msg');const u=document.getElementById('undo-btn');
+  m.textContent=msg;b.style.display='flex';
+  u.style.display=showUndo?'block':'none';
+  clearTimeout(undoTimer);
+  undoTimer=setTimeout(()=>{hideEB();undoStack=null;},8000);
+}
+function hideEB(){document.getElementById('EB').style.display='none';}
+
+function save(){
+  try{
+    localStorage.setItem('dq_s',JSON.stringify(students));
+    localStorage.setItem('dq_l',JSON.stringify(log));
+    localStorage.setItem('dq_p',JSON.stringify(privs));
+    localStorage.setItem('dq_a',JSON.stringify(acts));
+    localStorage.setItem('dq_q',JSON.stringify(quests));
+    localStorage.setItem('dq_cb',JSON.stringify(customBadges));
+    localStorage.setItem('dq_cats',JSON.stringify(xpCategories));
+    localStorage.setItem('dq_awarded',JSON.stringify(awardedSubmissions));
+    localStorage.setItem('dq_aal',JSON.stringify(autoAwardLog));
+  }catch(e){}
+}
+function load(){
+  try{
+    const s=localStorage.getItem('dq_s');const l=localStorage.getItem('dq_l');
+    const p=localStorage.getItem('dq_p');const a=localStorage.getItem('dq_a');const q=localStorage.getItem('dq_q');
+    if(s)students=JSON.parse(s);if(l)log=JSON.parse(l);
+    if(p)privs=JSON.parse(p);if(a)acts=JSON.parse(a);if(q)quests=JSON.parse(q);
+    const cb=localStorage.getItem('dq_cb');if(cb)customBadges=JSON.parse(cb);
+    const cats=localStorage.getItem('dq_cats');if(cats)xpCategories=JSON.parse(cats);
+    const aw=localStorage.getItem('dq_awarded');if(aw)awardedSubmissions=JSON.parse(aw);
+    const aal=localStorage.getItem('dq_aal');if(aal)autoAwardLog=JSON.parse(aal);
+  }catch(e){}
+}
+
+/* LEVEL-UP OVERLAY */
+function processLUQueue(){
+  if(!luQueue.length)return;
+  const s=luQueue.shift();
+  const rk=getRank(s.lv);
+  document.getElementById('luo-icon').textContent=rk.icon;
+  document.getElementById('luo-name').textContent=s.name;
+  document.getElementById('luo-rank').textContent=`Reached ${rk.name} — Level ${s.lv}`;
+  document.getElementById('LUO').style.display='flex';
+  spawnConfetti();
+}
+function closeLUO(){
+  document.getElementById('LUO').style.display='none';
+  if(luQueue.length)setTimeout(processLUQueue,400);
+}
+function spawnConfetti(){
+  const canvas=document.getElementById('conf-canvas');
+  const ctx=canvas.getContext('2d');
+  canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+  const pieces=[];const colors=['#C9923A','#6B1A2A','#E8C97A','#FFFFFF','#8B2A3E'];
+  for(let i=0;i<80;i++){pieces.push({x:Math.random()*canvas.width,y:-20,vx:(Math.random()-0.5)*4,vy:Math.random()*4+2,r:Math.random()*6+4,color:colors[Math.floor(Math.random()*colors.length)],rot:Math.random()*360,vr:(Math.random()-0.5)*10});}
+  let frame=0;
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    pieces.forEach(p=>{
+      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot*Math.PI/180);
+      ctx.fillStyle=p.color;ctx.fillRect(-p.r/2,-p.r/2,p.r,p.r);ctx.restore();
+      p.x+=p.vx;p.y+=p.vy;p.rot+=p.vr;p.vy+=0.05;
+    });
+    frame++;if(frame<120)requestAnimationFrame(draw);else ctx.clearRect(0,0,canvas.width,canvas.height);
+  }
+  draw();
+}
+
+/* AVATAR */
+function avHTML(s,size){
+  const fs=Math.round(size*0.32);
+  if(s.pic){return`<img class="av" src="${s.pic}" alt="${ini(s.name)}" style="width:${size}px;height:${size}px;" onerror="this.outerHTML='<div class=\\'av-text\\' style=\\'width:${size}px;height:${size}px;font-size:${fs}px;background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};\\'>${ini(s.name)}</div>'">`;}
+  return`<div class="av-text" style="width:${size}px;height:${size}px;font-size:${fs}px;background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};">${ini(s.name)}</div>`;
+}
+
+/* RENDER */
+function updHero(){
+  const avg=students.length?Math.round(students.reduce((a,s)=>a+s.lv,0)/students.length):0;
+  document.getElementById('h-s').textContent=students.length;
+  document.getElementById('h-a').textContent=avg;
+  document.getElementById('h-g').textContent=students.filter(s=>s.lv>=15).length;
+}
+function filt(cls){return cls==='All'?students:students.filter(s=>s.cls===cls);}
+function renderPills(id,active,fn){
+  const el=document.getElementById(id);if(!el)return;
+  const cls=getCls();
+  el.innerHTML=`<span class="pill${active==='All'?' active':''}" onclick="${fn}('All')">All</span>`
+    +cls.map(c=>`<span class="pill${active===c?' active':''}" onclick="${fn}('${c}')">${c}</span>`).join('');
+}
+function setRC(c){rcls=c;renderRoster();}
+function setAC(c){acls=c;renderAwardGrid();}
+function setLC(c){lcls=c;renderLB();}
+function setPVC(c){
+  pvcls=c;
+  document.querySelectorAll('.pv-pill').forEach(el=>{
+    el.classList.toggle('active',(c==='All'&&el.dataset.cls==='All')||(el.dataset.cls===c));
+  });
+  renderPV();
+}
+
+function sCard(s,forAward){
+  const rk=getRank(s.lv);const p=pct(s);const sel=selIds.has(s.id);
+  const bdg=s.badges.slice(-2).map(bid=>{const b=BADGES.find(x=>x.id===bid);return b?`<span class="bdg" style="background:${b.bg};color:${b.tx};">${b.icon} ${b.label}</span>`:''}).join('');
+  const fn=forAward?`tSel('${s.id}')`:`openM('${s.id}')`;
+  // Show rank border on card top border
+  const cardAccent=s.lv>=15?'border-top:3px solid var(--GO);'
+    :s.lv>=10?'border-top:3px solid var(--M);'
+    :s.lv>=5?'border-top:2px solid var(--GM);'
+    :'';
+  return`<div class="sc2${sel?' sel':''}" style="${cardAccent}" onclick="${fn}">
+    ${!forAward?`<button class="sc2-menu" onclick="event.stopPropagation();quickAward2('${s.id}')">+XP</button>`:''}
+    <div class="sct">${avHTML(s,38)}<div><div class="sn2">${s.name}</div><div class="sr" style="color:${rk.color};">${rk.icon} Lv ${s.lv} · ${rk.name}</div></div></div>
+    <div class="xbw"><div class="xb" style="width:${p}%;background:${rk.bar};"></div></div>
+    <div class="xl">${s.lv>=20?'Max level':xpIn(s)+' / '+xpNeed(s.lv)+' XP'}</div>
+    ${bdg?`<div class="br2">${bdg}</div>`:''}
+  </div>`;
+}
+
+function quickAward2(id){
+  const s=students.find(x=>x.id==id);if(!s)return;
+  const amt=prompt(`Quick award XP to ${s.name}. Enter amount:`)
+  if(!amt||isNaN(parseInt(amt)))return;
+  awardXP([id],parseInt(amt),'Quick award');
+}
+
+function updClassSel(){
+  const sel=document.getElementById('nc');if(!sel)return;
+  const cls=getCls();const cur=sel.value;
+  sel.innerHTML=cls.length?cls.map(c=>`<option value="${c}">${c}</option>`):'<option value="General">General</option>';
+  if(cls.includes(cur))sel.value=cur;
+}
+
+function renderRoster(){
+  updHero();renderPills('cp-r',rcls,'setRC');updClassSel();
+  const list=filt(rcls);
+  document.getElementById('sg-r').innerHTML=list.length?list.map(s=>sCard(s,false)).join(''):`<p style="font-size:13px;color:var(--INK3);grid-column:1/-1;">No students in this class.</p>`;
+}
+function renderAwardGrid(){
+  renderPills('cp-a',acls,'setAC');
+  document.getElementById('sg-a').innerHTML=filt(acls).map(s=>sCard(s,true)).join('');
+  document.getElementById('sc3').textContent=selIds.size+' selected';
+}
+function renderXPBtns(){
+  document.getElementById('xbg').innerHTML=acts.map(a=>
+    `<button class="xbtn" onclick="awardXP([...selIds],${a.xp},'${a.label}')"><span class="xbtn-name">${a.label}</span><span class="xbtn-xp">+${a.xp} XP</span></button>`
+  ).join('');
+}
+function renderLB(){
+  renderPills('cp-l',lcls,'setLC');
+  const sorted=[...filt(lcls)].sort((a,b)=>b.xp-a.xp);
+  const medals=['🥇','🥈','🥉'];const rc=['g','s','b'];
+  const allBadges=[...BADGES,...(customBadges||[])];
+  document.getElementById('lb').innerHTML=sorted.map((s,i)=>{
+    const rk=getRank(s.lv);
+    // Show badges earned — with tooltip on hover
+    const badgeHtml=s.badges.slice(-4).map(bid=>{
+      const b=allBadges.find(x=>x.id===bid);
+      if(!b)return'';
+      return`<span class="badge-tip" style="margin-left:3px;"><span style="font-size:13px;">${b.icon}</span><span class="tip">${b.label}: ${b.desc}</span></span>`;
+    }).join('');
+    return`<div class="lbr${i<3?' '+rc[i]:''}" onclick="openM('${s.id}')">
+      <div class="lbp">${i<3?medals[i]:i+1}</div>${avHTML(s,28)}
+      <div class="lbn">${s.name}${badgeHtml} <span style="font-size:11px;color:var(--GM);">${s.cls||''}</span></div>
+      <span class="lbt" style="background:${rk.bg};color:${rk.color};">${rk.icon} ${rk.name}</span>
+      <div class="lbx">${s.xp} XP</div>
+    </div>`;
+  }).join('');
+}
+function renderCVC(){
+  const cls=getCls();
+  const totals=cls.map(c=>{
+    const sts=students.filter(s=>s.cls===c);
+    const total=sts.reduce((a,s)=>a+s.xp,0);
+    const avg=sts.length?Math.round(total/sts.length):0;
+    return{cls:c,total,avg,count:sts.length};
+  }).sort((a,b)=>b.total-a.total);
+  const max=totals.length?totals[0].total:1;
+  const medals=['🥇','🥈','🥉'];
+  document.getElementById('cvc-grid').innerHTML=totals.map((t,i)=>`
+    <div class="cvc-card">
+      <div class="cvc-rank">${i<3?medals[i]:i+1}</div>
+      <div class="cvc-name">${t.cls}</div>
+      <div class="cvc-xp">${t.total.toLocaleString()} XP</div>
+      <div class="cvc-sub">${t.count} students · avg lv ${Math.round(students.filter(s=>s.cls===t.cls).reduce((a,s)=>a+s.lv,0)/(t.count||1))}</div>
+      <div class="cvc-bar-wrap"><div class="cvc-bar" style="width:${Math.round((t.total/max)*100)}%;"></div></div>
+    </div>`).join('');
+  const sorted=[...students].sort((a,b)=>b.xp-a.xp);
+  document.getElementById('cvc-lb').innerHTML=sorted.map((s,i)=>{
+    const rk=getRank(s.lv);
+    return`<div class="lbr${i<3?' g '+['g','s','b'][i]:''}" onclick="openM('${s.id}')">
+      <div class="lbp">${i<3?medals[i]:i+1}</div>${avHTML(s,28)}
+      <div class="lbn">${s.name}</div>
+      <span class="lbt" style="background:${rk.bg};color:${rk.color};">${s.cls}</span>
+      <div class="lbx">${s.xp} XP</div>
+    </div>`;
+  }).join('');
+}
+function renderQuests(){
+  const now=new Date();
+  if(!quests.length){document.getElementById('qb-grid').innerHTML=`<div style="font-size:13px;color:var(--INK3);text-align:center;padding:2rem;">No quests posted yet. Add one above.</div>`;return;}
+  document.getElementById('qb-grid').innerHTML=quests.map((q,i)=>{
+    const expired=q.deadline&&new Date(q.deadline)<now;
+    return`<div class="qb-item${expired?' qb-expired':' qb-active'}">
+      <div class="qb-icon">${q.icon||'📜'}</div>
+      <div class="qb-body">
+        <div class="qb-title">${q.title}</div>
+        <div class="qb-desc">${q.desc||''}</div>
+        ${q.deadline?`<div class="qb-deadline">Due: ${new Date(q.deadline).toLocaleDateString()}</div>`:''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+        <div class="qb-xp">+${q.xp} XP</div>
+        <button class="btn bm bxs" onclick="awardQuestXP(${i})">Award</button>
+        <button class="btn bd bxs" onclick="removeQuest(${i})">Remove</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function renderLog(){
+  const el=document.getElementById('ll');
+  if(!log.length){el.innerHTML='<div class="li">No events yet.</div>';return;}
+  el.innerHTML=log.map(l=>`<div class="li ${l.type||''}"><span>${l.msg}</span><span class="lt">${l.time}</span></div>`).join('');
+}
+function renderActsTable(){
+  const tb=document.getElementById('atb');if(!tb)return;
+  tb.innerHTML=acts.map((a,i)=>`<tr>
+    <td><input value="${a.label}" onchange="acts[${i}].label=this.value;save();renderXPBtns();"/></td>
+    <td><input type="number" value="${a.xp}" min="1" max="999" onchange="acts[${i}].xp=parseInt(this.value)||1;save();renderXPBtns();" style="width:80px;"/></td>
+    <td><button class="btn bd bxs" onclick="rmAct(${i})">Remove</button></td>
+  </tr>`).join('');
+}
+function addActivity(){acts.push({id:'a'+Date.now(),label:'New activity',xp:10});save();renderActsTable();renderXPBtns();}
+function rmAct(i){acts.splice(i,1);save();renderActsTable();renderXPBtns();}
+
+function addCustomBadge(){
+  const icon=document.getElementById('cb-icon').value.trim()||'🏅';
+  const label=document.getElementById('cb-label').value.trim();
+  const desc=document.getElementById('cb-desc').value.trim();
+  if(!label){showEB('Enter a badge name.');return;}
+  const id='cb_'+Date.now();
+  customBadges.push({id,label,desc:desc||label,icon,bg:'#FDF6E8',tx:'#7A5500',custom:true});
+  document.getElementById('cb-icon').value='🗺️';
+  document.getElementById('cb-label').value='';
+  document.getElementById('cb-desc').value='';
+  save();renderCustomBadges();
+}
+
+function renderCustomBadges(){
+  const el=document.getElementById('cb-list');if(!el)return;
+  if(!customBadges.length){el.innerHTML='<div style="font-size:13px;color:var(--INK3);">No custom badges yet.</div>';return;}
+  el.innerHTML=customBadges.map((b,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);">
+      <span style="font-size:18px;">${b.icon}</span>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:500;">${b.label}</div>
+        <div style="font-size:11px;color:var(--INK3);">${b.desc}</div>
+      </div>
+      <button class="btn bg bxs" onclick="openAwardBadgeModal('${b.id}')">Award</button>
+      <button class="btn bd bxs" onclick="removeCustomBadge(${i})">Remove</button>
+    </div>`).join('');
+}
+
+function removeCustomBadge(i){
+  const bid=customBadges[i].id;
+  customBadges.splice(i,1);
+  students.forEach(s=>{s.badges=s.badges.filter(b=>b!==bid);});
+  save();renderCustomBadges();render();
+}
+
+function openAwardBadgeModal(bid){
+  const b=customBadges.find(x=>x.id===bid)||BADGES.find(x=>x.id===bid);
+  if(!b)return;
+  let mo=document.getElementById('AB-MO');
+  if(!mo){
+    mo=document.createElement('div');mo.id='AB-MO';mo.className='mo';
+    mo.onclick=e=>{if(e.target===mo)closeABM();};
+    mo.innerHTML=`<div class="md" style="max-width:420px;">
+      <div class="mh"><h2 id="abm-title">Award Badge</h2><button class="mc" onclick="closeABM()">✕</button></div>
+      <div class="mb">
+        <p style="font-size:13px;color:var(--INK3);margin-bottom:1rem;" id="abm-desc"></p>
+        <input class="fi" id="abm-search" type="text" placeholder="Search student..." style="width:100%;margin-bottom:8px;" oninput="renderABMList()"/>
+        <div id="abm-list" style="display:flex;flex-direction:column;gap:4px;max-height:340px;overflow-y:auto;"></div>
+      </div>
+    </div>`;
+    document.body.appendChild(mo);
+  }
+  window._awardBid=bid;
+  document.getElementById('abm-title').textContent=`Award: ${b.icon} ${b.label}`;
+  document.getElementById('abm-desc').textContent=b.desc;
+  document.getElementById('abm-search').value='';
+  renderABMList();
+  mo.style.display='flex';
+}
+
+function renderABMList(){
+  const bid=window._awardBid;
+  const q=(document.getElementById('abm-search').value||'').toLowerCase();
+  const list=students.filter(s=>!q||s.name.toLowerCase().includes(q)).sort((a,b)=>a.name.localeCompare(b.name));
+  document.getElementById('abm-list').innerHTML=list.map(s=>{
+    const has=s.badges.includes(bid);
+    return`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--R);border:1px solid var(--BDG);background:var(--W);">
+      ${avHTML(s,28)}
+      <span style="flex:1;font-size:13px;">${s.name} <span style="font-size:11px;color:var(--INK3);">${s.cls}</span></span>
+      ${has
+        ?`<span style="font-size:11px;color:var(--M);font-family:Cinzel,serif;">✓ Awarded</span><button class="btn bd bxs" onclick="revokeBadge('${s.id}','${bid}')">Revoke</button>`
+        :`<button class="btn bm bxs" onclick="grantBadge('${s.id}','${bid}')">Award</button>`}
+    </div>`;
+  }).join('');
+}
+
+function grantBadge(sid,bid){
+  const s=students.find(x=>x.id==sid);const b=customBadges.find(x=>x.id===bid)||BADGES.find(x=>x.id===bid);
+  if(!s||!b)return;
+  if(!s.badges.includes(bid)){s.badges.push(bid);addLog(`${s.name} awarded "${b.label}" ${b.icon}`,'badge');}
+  save();renderABMList();render();
+}
+
+function revokeBadge(sid,bid){
+  const s=students.find(x=>x.id==sid);if(!s)return;
+  s.badges=s.badges.filter(b=>b!==bid);
+  save();renderABMList();render();
+}
+function closeABM(){const mo=document.getElementById('AB-MO');if(mo)mo.style.display='none';}
+function renderPrivEditor(){
+  const sp=[...privs].sort((a,b)=>a.level-b.level);
+  document.getElementById('pe').innerHTML=sp.map((p,i)=>`
+    <div class="pr">
+      <input class="fi" type="number" min="1" max="20" value="${p.level}" onchange="updPL(${i},this.value)" style="width:65px;"/>
+      <input class="fi" type="text" value="${p.text}" onchange="updPT(${i},this.value)" style="flex:1;"/>
+      <button class="btn bd bxs" onclick="rmPriv(${i})">Remove</button>
+    </div>`).join('');
+}
+function updPL(i,v){const sp=[...privs].sort((a,b)=>a.level-b.level);sp[i].level=parseInt(v)||1;privs=sp;save();renderPrivEditor();}
+function updPT(i,v){const sp=[...privs].sort((a,b)=>a.level-b.level);sp[i].text=v;privs=sp;save();}
+function addPriv(){
+  const lv=parseInt(document.getElementById('npl').value)||0;const txt=document.getElementById('npt').value.trim();
+  if(!lv||!txt){showEB('Enter both a level and a reward description.');return;}
+  privs.push({level:lv,text:txt});document.getElementById('npl').value='';document.getElementById('npt').value='';
+  save();renderPrivEditor();
+}
+function rmPriv(i){const sp=[...privs].sort((a,b)=>a.level-b.level);sp.splice(i,1);privs=sp;save();renderPrivEditor();}
+
+function render(){renderRoster();renderAwardGrid();renderLB();renderCVC();renderQuests();renderLog();renderActsTable();renderPrivEditor();renderXPBtns();renderCustomBadges();renderCategoryTable();renderAutoAwardLog();renderXPLevelTable();renderAssignClassPills();}
+
+function renderXPLevelTable(){
+  const tb=document.getElementById('xp-level-tbody');if(!tb)return;
+  tb.innerHTML=Array.from({length:20},(_,i)=>{
+    const lv=i+1;
+    const rk=getRank(lv);
+    const needed=lv===1?LVS[1]:LVS[lv]-LVS[lv-1];
+    const total=LVS[lv];
+    return`<tr style="background:${lv%2===0?'var(--GP)':'var(--W)'};">
+      <td style="font-family:'Cinzel',serif;font-weight:600;color:var(--M);">Lv ${lv}</td>
+      <td><span style="background:${rk.bg};color:${rk.color};padding:2px 8px;border-radius:20px;font-size:11px;">${rk.icon} ${rk.name}</span></td>
+      <td style="font-family:'Cinzel',serif;">${needed.toLocaleString()} XP</td>
+      <td style="color:var(--INK3);">${lv>=20?'—':total.toLocaleString()+' XP total'}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* QUEST FUNCTIONS */
+function openQuestModal(){document.getElementById('QMO').style.display='flex';}
+function closeQMO(e){if(e.target===document.getElementById('QMO'))closeQMD();}
+function closeQMD(){document.getElementById('QMO').style.display='none';}
+function saveQuest(){
+  const title=document.getElementById('q-title').value.trim();
+  if(!title){showEB('Enter a quest title.');return;}
+  quests.push({title,desc:document.getElementById('q-desc').value,xp:parseInt(document.getElementById('q-xp').value)||50,icon:document.getElementById('q-icon').value||'📜',deadline:document.getElementById('q-deadline').value||null,id:'q'+Date.now()});
+  save();renderQuests();closeQMD();
+  document.getElementById('q-title').value='';document.getElementById('q-desc').value='';
+}
+function removeQuest(i){quests.splice(i,1);save();renderQuests();}
+function awardQuestXP(i){
+  const q=quests[i];
+  if(!selIds.size){showEB('Select students on the Award XP tab first, then come back to award quest XP.');return;}
+  awardXP([...selIds],q.xp,q.title);
+}
+
+/* EXPORT */
+function exportCSV(){
+  const rows=[['Name','Class','Level','XP','Total XP Earned','Badges']];
+  students.forEach(s=>rows.push([s.name,s.cls,s.lv,s.xp,s.te,s.badges.join(';')]));
+  const csv=rows.map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');
+  dl('quest-roster.csv','data:text/csv;charset=utf-8,'+encodeURIComponent(csv));
+}
+function exportReport(){
+  const rows=[['Name','Class','Level','XP','Rank','Badges Earned']];
+  [...students].sort((a,b)=>b.xp-a.xp).forEach(s=>rows.push([s.name,s.cls,s.lv,s.xp,getRank(s.lv).name,s.badges.length]));
+  const csv=rows.map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');
+  dl('quest-xp-report.csv','data:text/csv;charset=utf-8,'+encodeURIComponent(csv));
+}
+function dl(name,href){const a=document.createElement('a');a.href=href;a.download=name;a.click();}
+
+function clearRoster(){
+  if(!confirm('This will remove ALL students, XP history, and the event log. Cannot be undone. Continue?'))return;
+  students=[];log=[];selIds.clear();curSid=null;
+  save();render();showEB('Roster cleared. You can now re-sync Google Classroom.');
+}
+function clearPics(){students.forEach(s=>s.pic=null);save();render();showEB('All profile photos cleared.');}
+function refetchPhotos(){
+  if(!gcToken){showEB('Sync Google Classroom first to establish a Google session.');return;}
+  showEB('Re-fetching profile photos...');
+  fetchProfilePhotos(students.filter(s=>s.gid).map(s=>s.gid)).then(()=>{save();render();showEB('Profile photos updated.');});
+}
+
+/* SEASON RESET */
+function seasonReset(){
+  if(!confirm('Reset the season? All XP and levels will be cleared. Students will keep custom badges and receive a Season Veteran badge. All rank/XP badges reset. This CANNOT be undone.'))return;
+  students.forEach(s=>{
+    s.xp=0;s.lv=1;s.te=0;
+    // Keep only custom badges and season veteran; strip all automatic badges
+    const autoIds=BADGES.map(b=>b.id).filter(id=>id!=='sv');
+    s.badges=s.badges.filter(id=>!autoIds.includes(id));
+    if(!s.badges.includes('sv'))s.badges.push('sv');
+  });
+  addLog('Season reset. All XP cleared. Season Veteran badges awarded.','event');
+  save();render();showEB('Season reset complete. All rank badges cleared. Season Veteran badge awarded to all students.');
+}
+
+/* MODAL */
+function openM(id){
+  const s=students.find(x=>x.id==id);if(!s)return;
+  const rk=getRank(s.lv);const p=pct(s);const sp=[...privs].sort((a,b)=>a.level-b.level);
+  const hist=(s.hist||[]);
+  document.getElementById('mt').textContent=s.name;
+  document.getElementById('mb').innerHTML=`
+    <div class="dh">
+      <div class="daw">
+        ${s.pic?`<img class="da" src="${s.pic}" alt="${s.name}" onerror="this.outerHTML='<div class=\\'da-text\\' style=\\'background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};\\'>'+\`${ini(s.name)}\`+'</div>'">`:`<div class="da-text" style="background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};">${ini(s.name)}</div>`}
+        <span class="rrib" style="background:${rk.bg};color:${rk.color};">${rk.icon} ${rk.name}</span>
+      </div>
+      <div>
+        <div class="dn">${s.name}</div>
+        <div class="drt" style="color:var(--INK3);">Class: ${s.cls||'—'}</div>
+        <div class="drt" style="color:${rk.color};margin-top:2px;">Level ${s.lv}</div>
+      </div>
+    </div>
+    <div class="dxs">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--INK3);"><span>XP Progress</span><span>${s.lv>=20?'Max level':xpIn(s)+' / '+xpNeed(s.lv)+' XP'}</span></div>
+      <div class="dxb"><div class="dxbar" style="width:${p}%;background:${rk.bar};"></div></div>
+      <div style="font-size:11px;color:var(--INK3);">All-time XP: ${s.te}</div>
+    </div>
+    <div class="dst">
+      <div class="dsc"><div class="dsv">${s.lv}</div><div class="dsl">Level</div></div>
+      <div class="dsc"><div class="dsv">${s.xp}</div><div class="dsl">XP</div></div>
+      <div class="dsc"><div class="dsv">${s.badges.length}</div><div class="dsl">Badges</div></div>
+    </div>
+    <div class="dst2">XP History (last 20)</div>
+    <div class="xp-hist" style="max-height:200px;">
+      ${hist.length?hist.slice(0,20).map(h=>`<div class="xp-hist-item"><span>${h.date} ${h.time} — ${h.reason}</span><span class="xp-hist-amt">+${h.amt}</span></div>`).join(''):'<div style="font-size:12px;color:var(--INK3);padding:4px 0;">No XP history yet.</div>'}
+    </div>
+    ${hist.length>20?`<button class="btn bg bsm" style="margin-bottom:1rem;" onclick="openFullHistory('${s.id}')">View all ${hist.length} entries</button>`:''}
+    <div class="dst2">Badges</div>
+    <div class="bgd">
+      ${[...BADGES,...(customBadges||[])].map(b=>{const e=s.badges.includes(b.id);return`<span class="bch${e?'':' bl'}" style="background:${b.bg};color:${b.tx};" title="${b.desc}">${b.icon} ${b.label}</span>`;}).join('')}
+    </div>
+    <div class="dst2">Privileges</div>
+    <div style="margin-bottom:1rem;">
+      ${sp.map(p=>{const e=s.lv>=p.level;return`<div class="dpi">
+        <span class="pc ${e?'y':'n'}">${e?'✓':'—'}</span>
+        <span style="font-size:11px;color:${e?'var(--M)':'var(--GM)'};min-width:54px;">Lv ${p.level}</span>
+        <span style="color:${e?'var(--INK)':'var(--INK3)'};">${p.text}</span>
+      </div>`;}).join('')}
+    </div>
+    <div class="ma">
+      <button class="btn bm bsm" onclick="qAward('${s.id}',25,'Assignment')">+25 XP</button>
+      <button class="btn bg bsm" onclick="qAward('${s.id}',40,'Assessment')">+40 XP</button>
+      <button class="btn bg bsm" onclick="qAward('${s.id}',10,'Attendance')">+10 XP</button>
+      <button class="btn bd bsm" onclick="rmS('${s.id}')">Remove</button>
+      <div class="la">
+        <span style="font-size:11px;color:var(--INK3);">Adj. level:</span>
+        <button class="lb2" onclick="adjLv('${s.id}',-1)">−</button>
+        <span class="lv2" id="lv2-${s.id}">${s.lv}</span>
+        <button class="lb2" onclick="adjLv('${s.id}',1)">+</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('MO').style.display='flex';
+}
+function adjLv(id,d){
+  const s=students.find(x=>x.id==id);if(!s)return;
+  const nl=Math.max(1,Math.min(20,s.lv+d));
+  s.lv=nl;s.xp=LVS[nl-1];chkBadges(s);
+  addLog(`${s.name} level set to ${nl}.`,'event');save();render();
+  const el=document.getElementById('lv2-'+id);if(el)el.textContent=nl;
+}
+function qAward(id,xp,r){awardXP([id],xp,r);closeMD();}
+function rmS(id){if(!confirm('Remove this student?'))return;students=students.filter(s=>s.id!=id);save();render();closeMD();}
+function closeMO(e){if(e.target===document.getElementById('MO'))closeMD();}
+function closeMD(){document.getElementById('MO').style.display='none';}
+
+/* PROJECTOR VIEW */
+function openPV(){
+  document.getElementById('PV').style.display='flex';
+  const cls=getCls();
+  document.getElementById('pv-filter').innerHTML=
+    `<span class="pv-pill${pvcls==='All'?' active':''}" data-cls="All" onclick="setPVC('All')">All</span>`
+    +cls.map(c=>`<span class="pv-pill${pvcls===c?' active':''}" data-cls="${c}" onclick="setPVC('${c}')">${c}</span>`).join('');
+  renderPV();
+}
+function closePV(){document.getElementById('PV').style.display='none';}
+function renderPV(){
+  const sorted=[...filt(pvcls)].sort((a,b)=>b.xp-a.xp);
+  const medals=['🥇','🥈','🥉'];const topCls=['top1','top2','top3'];
+  document.getElementById('pv-grid').innerHTML=sorted.map((s,i)=>{
+    const rk=getRank(s.lv);const p=pct(s);
+    const avEl=s.pic?`<img class="pv-av" src="${s.pic}" alt="${ini(s.name)}" onerror="this.outerHTML='<div class=\\'pv-av-text\\' style=\\'background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};\\'>'+\`${ini(s.name)}\`+'</div>'">`:`<div class="pv-av-text" style="background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};">${ini(s.name)}</div>`;
+    return`<div class="pv-card${i<3?' '+topCls[i]:''}">
+      <div class="pv-pos">${i<3?medals[i]:i+1}</div>
+      ${avEl}
+      <div style="flex:1;min-width:0;">
+        <div class="pv-name">${s.name}</div>
+        <div class="pv-rank">${rk.icon} ${rk.name} · Lv ${s.lv}</div>
+        <div class="pv-xpbar-wrap"><div class="pv-xpbar" style="width:${p}%;background:${rk.bar};"></div></div>
+      </div>
+      <div class="pv-xp">${s.xp}</div>
+    </div>`;
+  }).join('');
+  const recent=log.filter(l=>l.type==='xp'||l.type==='level').slice(0,8).map(l=>l.msg).join('   ·   ');
+  const tickerEl=document.getElementById('pv-ticker');
+  tickerEl.textContent=recent||'No recent activity — award XP to see updates here.';
+  // Speed: ~60px per second, minimum 30s, maximum 90s
+  const charCount=tickerEl.textContent.length;
+  const duration=Math.max(30,Math.min(90,charCount*0.5));
+  tickerEl.style.animation=`ticker ${duration}s linear infinite`;
+}
+
+/* TABS / VIEW */
+function showTab(id){
+  document.querySelectorAll('.pnl').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('pnl-'+id).classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+}
+function switchView(v){
+  document.getElementById('vt-t').classList.toggle('active',v==='teacher');
+  document.getElementById('vt-s').classList.toggle('active',v==='student');
+  const tv=document.getElementById('TV');
+  const sv=document.getElementById('SV');
+  if(v==='teacher'){
+    tv.style.display='block';
+    sv.style.display='none';
+    sv.innerHTML='';
+    window.scrollTo({top:0,behavior:'instant'});
+  } else {
+    tv.style.display='none';
+    sv.style.display='block';
+    renderSV();
+    // Use requestAnimationFrame to scroll after content paints
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        window.scrollTo({top:0,behavior:'instant'});
+        document.getElementById('SV')?.scrollIntoView({block:'start',behavior:'instant'});
+      });
+    });
+  }
+  document.getElementById('proj-btn').style.display=v==='teacher'?'block':'none';
+}
+function selAll(){selIds=new Set(filt(acls).map(s=>s.id));renderAwardGrid();}
+function deselAll(){selIds.clear();renderAwardGrid();}
+function tSel(id){const s=students.find(x=>x.id==id);if(!s)return;if(selIds.has(s.id))selIds.delete(s.id);else selIds.add(s.id);renderAwardGrid();}
+function addStudent(){
+  const inp=document.getElementById('nn');const cls=document.getElementById('nc');
+  const name=inp.value.trim();if(!name)return;
+  students.push(mkS(name,students.length,cls?cls.value:'General'));
+  inp.value='';addLog(`${name} joined the roster.`,'event');save();render();
+}
+
+/* STUDENT VIEW */
+function rankFilter(lv){
+  if(lv>=15)return{border:'3px solid var(--GO)',boxShadow:'0 0 12px rgba(201,146,58,0.6)',extra:'<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);font-size:18px;">👑</div>'};
+  if(lv>=10)return{border:'3px solid var(--M)',boxShadow:'0 0 8px rgba(107,26,42,0.5)',extra:''};
+  if(lv>=5)return{border:'3px solid var(--GM)',boxShadow:'none',extra:''};
+  return{border:'2px solid rgba(255,255,255,0.3)',boxShadow:'none',extra:''};
+}
+
+const AVATAR_ICONS=['⚔️','🛡️','🏹','🪄','📜','🔭','⚗️','🗺️','🎯','🦅','🐉','🌟','🔥','❄️','⚡'];
+
+function renderSV(){
+  const sv=document.getElementById('SV');
+  if(!sv)return;
+  const s=students.find(x=>x.id==curSid);
+  if(!s){
+    sv.innerHTML=`<div style="max-width:640px;margin:0 auto;padding:2rem 20px;"><div class="nfm"><div style="font-size:40px;margin-bottom:12px;">🚀</div><h2>Not found in roster</h2><p style="font-size:14px;color:var(--INK3);margin-top:8px;">Your account (<strong>${curUser?curUser.email:''}</strong>) is not linked to a student yet.<br/>Ask Mr. Dutcher to sync Google Classroom or add you manually.</p></div></div>`;
+    return;
+  }
+  // Only store photo if this is a real student sign-in, not a teacher preview
+  if(curUser&&curUser.picture&&!isT&&s.gid&&matchUser(curUser)===s.id){
+    if(!s.pic){s.pic=curUser.picture;save();}
+  }
+
+  const rk=getRank(s.lv);const p=pct(s);
+  const rf=rankFilter(s.lv);
+  const sorted=[...students].sort((a,b)=>b.lv-a.lv);
+  const sp=[...privs].sort((a,b)=>a.level-b.level);
+  const allBadges=[...BADGES,...(customBadges||[])];
+  const eb=allBadges.filter(b=>s.badges.includes(b.id));
+  const lb2=allBadges.filter(b=>!s.badges.includes(b.id)&&b.id!=='sv');
+  const avatarIcon=s.avatarIcon||'⚔️';
+  const motto=s.motto||'';
+
+  // Build avatar: pic with rank filter + avatar icon badge overlay (TikTok style), or emoji avatar
+  const picEl=s.pic
+    ?`<div style="position:relative;display:inline-block;margin:0 auto 1rem;">
+        ${rf.extra}
+        <img src="${s.pic}" alt="${s.name}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;${rf.border?'border:'+rf.border+';':''}${rf.boxShadow?'box-shadow:'+rf.boxShadow+';':''}display:block;" onerror="this.parentElement.outerHTML='<div class=\\'sha-text\\' style=\\'background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};margin:0 auto 1rem;\\'>${avatarIcon}</div>'"/>
+        <div style="position:absolute;bottom:-4px;right:-4px;width:28px;height:28px;border-radius:50%;background:var(--MD);border:2px solid var(--GO);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 1px 4px rgba(0,0,0,0.4);">${avatarIcon}</div>
+      </div>`
+    :`<div style="position:relative;display:inline-block;margin:0 auto 1rem;">
+        <div class="sha-text" style="background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};margin:0;font-size:32px;${rf.border?'border:'+rf.border+';':''}${rf.boxShadow?'box-shadow:'+rf.boxShadow+';':''}">${avatarIcon}</div>
+      </div>`;
+
+  const activeQ=quests.filter(q=>!q.deadline||new Date(q.deadline)>=new Date());
+  sv.innerHTML=`<div style="max-width:640px;margin:0 auto;padding:1rem 20px 2rem;">
+    <div class="shc" style="padding-top:1.5rem;margin-bottom:1.25rem;"><div class="shc-av-wrap">${picEl}</div>
+      <div class="shn">${s.name}</div>
+      ${motto?`<div style="font-size:13px;color:rgba(255,255,255,0.5);font-style:italic;margin-bottom:6px;">"${motto}"</div>`:''}
+      <div class="shr" style="color:rgba(255,255,255,.65);">${rk.icon} Level ${s.lv} · ${rk.name}</div>
+      <div class="hxw"><div class="hxb" style="width:${p}%;background:${rk.bar};"></div></div>
+      <div class="hxl">${s.lv>=20?'⭐ Max level — Legend status!':xpIn(s)+' / '+xpNeed(s.lv)+' XP to Level '+(s.lv+1)}</div>
+      <button onclick="openCustomize()" style="margin-top:12px;font-size:11px;padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.25);background:transparent;color:rgba(255,255,255,0.6);cursor:pointer;font-family:Cinzel,serif;position:relative;z-index:1;">✏️ Customize</button>
+    </div>
+    <div class="ssg">
+      <div class="stc"><div class="stv">${s.lv}</div><div class="stl">Level</div></div>
+      <div class="stc"><div class="stv">${s.xp}</div><div class="stl">XP</div></div>
+      <div class="stc"><div class="stv">${s.badges.length}</div><div class="stl">Badges</div></div>
+    </div>
+    ${activeQ.length?`<div class="ss"><h2>📋 Active Quests</h2>${activeQ.map(q=>`<div class="sq-item"><div class="sq-icon">${q.icon}</div><div><div class="sq-title">${q.title}</div><div class="sq-desc">${q.desc||''}${q.deadline?' · Due: '+new Date(q.deadline).toLocaleDateString():''}</div></div><div class="sq-xp">+${q.xp} XP</div></div>`).join('')}</div>`:''}
+    <div class="ss"><h2>🏅 Badges</h2>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${eb.map(b=>`<span class="bch" style="background:${b.bg};color:${b.tx};" title="${b.desc}">${b.icon} ${b.label}</span>`).join('')}
+        ${lb2.map(b=>`<span class="bch bl" style="background:${b.bg};color:${b.tx};" title="Locked: ${b.desc}">${b.icon} ${b.label}</span>`).join('')}
+        ${eb.length===0?'<span style="font-size:13px;color:var(--INK3);">No badges yet — keep earning XP!</span>':''}
+      </div>
+    </div>
+    <div class="ss"><h2>🏆 Class Leaderboard</h2>
+      ${sorted.map((st,i)=>{const r=getRank(st.lv);const me=st.id==s.id;const md=['🥇','🥈','🥉'];
+        return`<div class="slr${me?' me':''}">
+          <span class="slp">${i<3?md[i]:i+1}</span>${avHTML(st,24)}
+          <span class="sln">${me?'<strong>'+st.name+' (you)</strong>':st.name}</span>
+          <span class="slv" style="color:${r.color};">${r.icon} Lv ${st.lv}</span>
+        </div>`;}).join('')}
+    </div>
+    <div class="ss"><h2>🎁 Privileges</h2>
+      ${sp.map(p=>{const e=s.lv>=p.level;return`<div class="ps${e?' earned':' locked'}">
+        <span class="pc ${e?'y':'n'}">${e?'✓':'—'}</span>
+        <span style="font-size:11px;color:${e?'var(--M)':'var(--GM)'};min-width:54px;">Lv ${p.level}</span>
+        <span style="color:${e?'var(--INK)':'var(--INK3)'};">${p.text}</span>
+      </div>`;}).join('')}
+    </div>
+    <div class="ss"><h2>📊 XP required per level</h2>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr>
+            <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--BDG);font-family:'Cinzel',serif;font-size:10px;letter-spacing:.5px;color:var(--G);">Level</th>
+            <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--BDG);font-family:'Cinzel',serif;font-size:10px;letter-spacing:.5px;color:var(--G);">Rank</th>
+            <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--BDG);font-family:'Cinzel',serif;font-size:10px;letter-spacing:.5px;color:var(--G);">XP to reach</th>
+            <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--BDG);font-family:'Cinzel',serif;font-size:10px;letter-spacing:.5px;color:var(--G);">Status</th>
+          </tr></thead>
+          <tbody>${Array.from({length:20},(_,i)=>{
+            const lv=i+1;const rk=getRank(lv);
+            const needed=lv===1?LVS[1]:LVS[lv]-LVS[lv-1];
+            const reached=s.lv>=lv;const current=s.lv===lv;
+            return`<tr style="background:${current?'var(--MP)':lv%2===0?'var(--GP)':'var(--W)'};">
+              <td style="padding:5px 8px;font-family:'Cinzel',serif;font-weight:${current?'700':'400'};color:${reached?'var(--M)':'var(--INK3)'};">Lv ${lv}</td>
+              <td style="padding:5px 8px;"><span style="background:${rk.bg};color:${rk.color};padding:1px 7px;border-radius:20px;font-size:10px;">${rk.icon} ${rk.name}</span></td>
+              <td style="padding:5px 8px;color:${reached?'var(--INK)':'var(--INK3)'};">${needed.toLocaleString()} XP</td>
+              <td style="padding:5px 8px;font-size:12px;">${lv>=20?'🏆 Max':reached?'✓ Reached':current?'← You are here':''}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* CUSTOMIZE MODAL */
+function openCustomize(){
+  const s=students.find(x=>x.id==curSid);if(!s)return;
+  let mo=document.getElementById('CUST-MO');
+  if(!mo){
+    mo=document.createElement('div');mo.id='CUST-MO';mo.className='mo';
+    mo.onclick=e=>{if(e.target===mo)closeCust();};
+    mo.innerHTML=`<div class="md" style="max-width:440px;">
+      <div class="mh"><h2>Customize Your Profile</h2><button class="mc" onclick="closeCust()">✕</button></div>
+      <div class="mb">
+        <div style="margin-bottom:1rem;">
+          <div class="sl">Your motto</div>
+          <input class="fi" id="cust-motto" type="text" maxlength="60" placeholder="A short personal motto..." style="width:100%;"/>
+          <div style="font-size:11px;color:var(--INK3);margin-top:4px;">Max 60 characters. Displayed under your name.</div>
+        </div>
+        <div style="margin-bottom:1rem;">
+          <div class="sl">Avatar icon</div>
+          <div id="cust-icons" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+        </div>
+        <div style="margin-bottom:1rem;background:var(--GP);border-radius:var(--R);padding:12px;">
+          <div class="sl" style="margin-bottom:6px;">Rank profile filter</div>
+          <div style="font-size:13px;color:var(--INK3);">Your profile picture border upgrades automatically as you level up:</div>
+          <div style="font-size:12px;margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+            <span>🛡️ Recruit (Lv 1–4) — no border</span>
+            <span>⚔️ Soldier (Lv 5–9) — silver border</span>
+            <span>🎖️ Captain (Lv 10–14) — maroon glow</span>
+            <span>👑 General (Lv 15–20) — gold glow + crown</span>
+          </div>
+        </div>
+        <button class="btn bm" onclick="saveCust()">Save</button>
+      </div>
+    </div>`;
+    document.body.appendChild(mo);
+  }
+  document.getElementById('cust-motto').value=s.motto||'';
+  const selIcon=s.avatarIcon||'⚔️';
+  document.getElementById('cust-icons').innerHTML=AVATAR_ICONS.map(ic=>
+    `<span onclick="selectIcon('${ic}')" style="font-size:24px;cursor:pointer;padding:6px;border-radius:var(--R);border:2px solid ${ic===selIcon?'var(--M)':'transparent'};background:${ic===selIcon?'var(--MP)':'transparent'};" id="icon-${ic.codePointAt(0)}">${ic}</span>`
+  ).join('');
+  let selIconCur=selIcon;
+  window._custIconSel=selIcon;
+  mo.style.display='flex';
+}
+function selectIcon(ic){
+  window._custIconSel=ic;
+  document.querySelectorAll('#cust-icons span').forEach(el=>{
+    el.style.borderColor='transparent';el.style.background='transparent';
+  });
+  const id='icon-'+ic.codePointAt(0);
+  const el=document.getElementById(id);
+  if(el){el.style.borderColor='var(--M)';el.style.background='var(--MP)';}
+}
+function saveCust(){
+  const s=students.find(x=>x.id==curSid);if(!s)return;
+  s.motto=document.getElementById('cust-motto').value.trim();
+  s.avatarIcon=window._custIconSel||s.avatarIcon||'⚔️';
+  save();closeCust();renderSV();
+}
+function closeCust(){const mo=document.getElementById('CUST-MO');if(mo)mo.style.display='none';}
+
+function avHTML(s,size){
+  const fs=Math.round(size*0.38);
+  const rk=getRank(s.lv);
+  // Rank border: General=gold, Captain=maroon, Soldier=grey, Recruit=none
+  const borderStyle=s.lv>=15?`border:2px solid var(--GO);box-shadow:0 0 5px rgba(201,146,58,0.5);`
+    :s.lv>=10?`border:2px solid var(--M);`
+    :s.lv>=5?`border:2px solid var(--GM);`
+    :`border:2px solid rgba(200,200,200,0.4);`;
+  if(s.pic){
+    return`<img class="av" src="${s.pic}" alt="" style="width:${size}px;height:${size}px;${borderStyle}" onerror="this.outerHTML='<div class=\\'av-text\\' style=\\'width:${size}px;height:${size}px;font-size:${fs}px;${borderStyle}background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};\\'>'+\`${s.avatarIcon||ini(s.name)}\`+'</div>'">`;
+  }
+  const display=s.avatarIcon||ini(s.name);
+  return`<div class="av-text" style="width:${size}px;height:${size}px;font-size:${s.avatarIcon?Math.round(size*0.5):fs}px;${borderStyle}background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};">${display}</div>`;
+}
+
+/* MATCHING */
+function matchUser(user){
+  if(!user||!students.length)return null;
+  const gid=user.googleId;const full=(user.name||'').toLowerCase().trim();
+  const parts=(user.name||'').split(' ');const first=parts[0].toLowerCase();const last=parts[parts.length-1].toLowerCase();
+  const emailPre=(user.email||'').split('@')[0].toLowerCase();
+  let m=students.find(s=>s.gid&&s.gid===gid);if(m)return m.id;
+  m=students.find(s=>s.name.toLowerCase().trim()===full);if(m)return m.id;
+  m=students.find(s=>{const sp=s.name.toLowerCase().split(' ');return sp[0]===first&&sp[sp.length-1]===last;});if(m)return m.id;
+  m=students.find(s=>s.name.toLowerCase().replace(/[^a-z]/g,'').includes(emailPre.replace(/[^a-z]/g,'')));if(m)return m.id;
+  m=students.find(s=>s.name.toLowerCase().startsWith(first));return m?m.id:null;
+}
+
+/* AUTH */
+function signIn(){if(typeof google==='undefined'){loadGS(()=>initGA(true));}else{initGA(true);}}
+function loadGS(cb){const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=cb;document.head.appendChild(s);}
+function initGA(auto){google.accounts.id.initialize({client_id:GCL_ID,callback:handleCred,auto_select:false});if(auto)google.accounts.id.prompt();}
+function handleCred(resp){
+  const pl=parseJWT(resp.credential);
+  curUser={name:pl.name,email:pl.email,picture:pl.picture,googleId:pl.sub};
+  isT=TEMAILS.includes((pl.email||'').toLowerCase());
+  completeSignIn();
+}
+function parseJWT(t){try{return JSON.parse(atob(t.split('.')[1]));}catch(e){return{};}}
+function completeSignIn(){
+  document.getElementById('SS').style.display='none';
+  const appEl=document.getElementById('app');
+  appEl.style.display='flex';appEl.style.flexDirection='column';
+  load();
+  loadSavedPeriods();
+  if(curUser){
+    document.getElementById('UP').style.display='flex';
+    document.getElementById('UNL').textContent=curUser.name;
+    if(curUser.picture)document.getElementById('UAV').src=curUser.picture;
+  }
+  curSid=matchUser(curUser);
+  // Only store photo when a real student signs in (not the teacher previewing)
+  if(curSid&&curUser&&curUser.picture&&!isT){
+    const _s=students.find(x=>x.id==curSid);
+    if(_s&&!_s.pic){_s.pic=curUser.picture;save();}
+  }
+  if(isT){
+    document.getElementById('VT').style.display='flex';
+    document.getElementById('proj-btn').style.display='block';
+    document.getElementById('TV').style.display='block';
+    document.getElementById('SV').style.display='none';
+    render();
+  } else {
+    document.getElementById('TV').style.display='none';
+    document.getElementById('SV').style.display='block';
+    renderSV();
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{window.scrollTo({top:0,behavior:'instant'});});
+    });
+  }
+}
+function demoMode(){
+  curUser={name:'Mr. Dutcher (Demo)',email:'dutcher@deruytercentral.org',picture:'',googleId:'demo'};
+  isT=true;
+  if(!students.length)students=DEMOS.map((d,i)=>mkS(d.name,i,d.cls));
+  completeSignIn();
+}
+function signOut(){curUser=null;isT=false;curSid=null;document.getElementById('SS').style.display='flex';document.getElementById('app').style.display='none';}
+
+/* GOOGLE CLASSROOM SYNC — PICKER BASED */
+let allCourses=[];let syncSelected=new Set();
+
+function syncGC(){if(!gcToken){reqGCToken();return;}openSyncPicker();}
+function reqGCToken(){
+  if(!tclient){tclient=google.accounts.oauth2.initTokenClient({
+    client_id:GCL_ID,
+    scope:'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.rosters.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly https://www.googleapis.com/auth/classroom.student-submissions.students.readonly',
+    callback:(resp)=>{if(resp.error){showEB('Auth failed: '+resp.error);return;}gcToken=resp.access_token;openSyncPicker();}
+  });}
+  tclient.requestAccessToken();
+}
+
+function openSyncPicker(){
+  showEB('Loading your Google Classroom courses...');
+  fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=50',{headers:{Authorization:'Bearer '+gcToken}})
+  .then(r=>r.json()).then(data=>{
+    hideEB();
+    if(!data.courses||!data.courses.length){showEB('No active courses found.');return;}
+    allCourses=data.courses;
+    syncSelected=new Set(allCourses.map(c=>c.id));
+    renderSyncCourseList();
+    document.getElementById('SYNC-MO').style.display='flex';
+  }).catch(e=>showEB('Error loading courses: '+e.message));
+}
+
+function renderSyncCourseList(){
+  // Count name duplicates to show IDs for disambiguation
+  const nameCounts={};
+  allCourses.forEach(c=>{nameCounts[c.name]=(nameCounts[c.name]||0)+1;});
+  document.getElementById('sync-course-list').innerHTML=allCourses.map(c=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);cursor:pointer;">
+      <input type="checkbox" ${syncSelected.has(c.id)?'checked':''} onchange="toggleSyncCourse('${c.id}',this.checked)" style="accent-color:var(--M);width:16px;height:16px;flex-shrink:0;"/>
+      <div>
+        <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--MD);">${c.name}</div>
+        ${nameCounts[c.name]>1?`<div style="font-size:11px;color:var(--GM);">ID: ${c.id} · ${c.enrollmentCode||'no code'}</div>`:''}
+        <div style="font-size:11px;color:var(--INK3);">${c.section||''} ${c.description?'· '+c.description.slice(0,60):''}</div>
+      </div>
+    </label>`).join('');
+}
+
+function toggleSyncCourse(id,checked){if(checked)syncSelected.add(id);else syncSelected.delete(id);}
+function syncSelectAll(){syncSelected=new Set(allCourses.map(c=>c.id));renderSyncCourseList();}
+function syncSelectNone(){syncSelected.clear();renderSyncCourseList();}
+function closeSyncMO(){document.getElementById('SYNC-MO').style.display='none';}
+
+function doSync(){
+  if(!syncSelected.size){showEB('Select at least one class to sync.');return;}
+  closeSyncMO();
+  showEB('Syncing selected classes...');
+  const selected=allCourses.filter(c=>syncSelected.has(c.id));
+
+  // Count name duplicates to label them uniquely
+  const nameCounts={};
+  selected.forEach(c=>{nameCounts[c.name]=(nameCounts[c.name]||0)+1;});
+  const usedLabels={};
+  const courseLabel=(course)=>{
+    if(nameCounts[course.name]<=1)return course.name;
+    // Use section if available, otherwise incrementing number
+    if(course.section)return course.name+' — '+course.section;
+    usedLabels[course.name]=(usedLabels[course.name]||0)+1;
+    return course.name+' ('+usedLabels[course.name]+')';
+  };
+
+  Promise.all(selected.map(course=>
+    fetch(`https://classroom.googleapis.com/v1/courses/${course.id}/students?pageSize=150`,{headers:{Authorization:'Bearer '+gcToken}})
+    .then(r=>r.json()).then(d=>({course,roster:d.students||[]})).catch(()=>({course,roster:[]}))
+  )).then(results=>{
+    let added=0;
+    const allGids=[];
+
+    results.forEach(({course,roster})=>{
+      const cn=courseLabel(course);
+      roster.forEach(st=>{
+        const name=st.profile.name.fullName;
+        const gid=st.profile.id;
+        allGids.push(gid);
+
+        let ex=students.find(s=>s.gid===gid);
+        if(!ex)ex=students.find(s=>s.name.toLowerCase().trim()===name.toLowerCase().trim()&&!s.gid);
+        if(ex){
+          ex.gid=gid;
+          if(!ex.cls||ex.cls==='General')ex.cls=cn;
+        } else {
+          const ns=mkS(name,students.length,cn);
+          ns.gid=gid;
+          students.push(ns);added++;
+        }
+      });
+    });
+
+    // Now fetch profile photos via People API for all synced students
+    fetchProfilePhotos(allGids).then(()=>{
+      curSid=matchUser(curUser);save();render();
+      showEB(`Synced ${results.length} class${results.length!==1?'es':''} — ${added} new student${added!==1?'s':''} added.`);
+    });
+  }).catch(e=>showEB('Sync error: '+e.message));
+}
+
+function fetchProfilePhotos(gids){
+  // Use People API to get photos by resource name (people/GOOGLE_ID)
+  // Batch in groups of 50
+  const studentsToFetch=students.filter(s=>s.gid&&!s.pic);
+  if(!studentsToFetch.length)return Promise.resolve();
+
+  const batches=[];
+  for(let i=0;i<studentsToFetch.length;i+=50){
+    batches.push(studentsToFetch.slice(i,i+50));
+  }
+
+  return Promise.all(batches.map(batch=>{
+    const names=batch.map(s=>'people/'+s.gid).join(',');
+    return fetch(`https://people.googleapis.com/v1/people:batchGet?resourceNames=${encodeURIComponent(names)}&personFields=photos`,{
+      headers:{Authorization:'Bearer '+gcToken}
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if(!data.responses)return;
+      data.responses.forEach(resp=>{
+        if(!resp.person)return;
+        const gid=resp.person.resourceName.replace('people/','');
+        const s=students.find(x=>x.gid===gid);
+        if(!s)return;
+        const photos=resp.person.photos||[];
+        const photo=photos.find(p=>!p.metadata?.primary===false)||photos[0];
+        if(photo&&photo.url){
+          let url=photo.url;
+          if(!url.startsWith('http'))url='https:'+url;
+          url=url.replace(/=s\d+(-c)?$/,'=s96-c');
+          s.pic=url;
+        }
+      });
+    }).catch(()=>{});
+  }));
+}
+
+/* STUDENT PREVIEW (teacher only) */
+function onStudentViewClick(){
+  if(isT){
+    // Teacher — show picker to select which student to preview
+    renderSPVList();
+    document.getElementById('SPV-MO').style.display='flex';
+  } else {
+    switchView('student');
+  }
+}
+
+function renderSPVList(){
+  const q=(document.getElementById('spv-search').value||'').toLowerCase();
+  const list=students.filter(s=>!q||s.name.toLowerCase().includes(q)).sort((a,b)=>a.name.localeCompare(b.name));
+  document.getElementById('spv-list').innerHTML=list.map(s=>{
+    const rk=getRank(s.lv);
+    return`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--R);cursor:pointer;border:1px solid ${curSid==s.id?'var(--M)':'var(--BDG)'};background:${curSid==s.id?'var(--MP)':'var(--W)'};" onclick="previewStudent('${s.id}')">
+      ${avHTML(s,32)}
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:500;">${s.name}</div>
+        <div style="font-size:11px;color:${rk.color};">${rk.icon} Lv ${s.lv} · ${s.cls}</div>
+      </div>
+      ${curSid==s.id?'<span style="font-size:11px;color:var(--M);font-family:Cinzel,serif;">Previewing</span>':''}
+    </div>`;
+  }).join('');
+}
+
+function previewStudent(id){
+  curSid=id;closeSPV();
+  switchView('student');
+}
+function closeSPV(){document.getElementById('SPV-MO').style.display='none';}
+
+function openFullHistory(id){
+  const s=students.find(x=>x.id==id);if(!s)return;
+  const hist=s.hist||[];
+  let mo=document.getElementById('HIST-MO');
+  if(!mo){
+    mo=document.createElement('div');mo.id='HIST-MO';mo.className='mo';
+    mo.onclick=e=>{if(e.target===mo)mo.style.display='none';};
+    mo.innerHTML=`<div class="md" style="max-width:600px;">
+      <div class="mh"><h2 id="hist-title">XP History</h2><button class="mc" onclick="document.getElementById('HIST-MO').style.display='none'">✕</button></div>
+      <div class="mb">
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <input class="fi" id="hist-search" type="text" placeholder="Search assignments..." style="flex:1;" oninput="filterHistoryView()"/>
+          <button class="btn bo bsm" onclick="exportStudentHistory('${id}')">Export CSV</button>
+        </div>
+        <div style="font-size:12px;color:var(--INK3);margin-bottom:8px;" id="hist-summary"></div>
+        <div id="hist-list" style="max-height:500px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
+      </div>
+    </div>`;
+    document.body.appendChild(mo);
+  }
+  window._histStudentId=id;
+  document.getElementById('hist-title').textContent=s.name+' — Full XP History';
+  document.getElementById('hist-search').value='';
+  filterHistoryView();
+  mo.style.display='flex';
+}
+
+function filterHistoryView(){
+  const id=window._histStudentId;
+  const s=students.find(x=>x.id==id);if(!s)return;
+  const q=(document.getElementById('hist-search')?.value||'').toLowerCase();
+  const hist=(s.hist||[]).filter(h=>!q||h.reason.toLowerCase().includes(q)||String(h.amt).includes(q));
+  const total=hist.reduce((a,h)=>a+h.amt,0);
+  const summary=document.getElementById('hist-summary');
+  if(summary)summary.textContent=`${hist.length} entr${hist.length!==1?'ies':'y'} — ${total} XP total${q?' (filtered)':''}`;
+  const list=document.getElementById('hist-list');
+  if(!list)return;
+  list.innerHTML=hist.length?hist.map(h=>`
+    <div class="xp-hist-item" style="padding:6px 8px;background:var(--W);border:1px solid var(--BDG);border-radius:var(--R);border-left:3px solid var(--M);">
+      <span style="flex:1;"><span style="font-size:11px;color:var(--GM);">${h.date} ${h.time}</span><br/>${h.reason}</span>
+      <span class="xp-hist-amt" style="font-size:14px;margin-left:12px;flex-shrink:0;">+${h.amt} XP</span>
+    </div>`).join('')
+    :'<div style="font-size:13px;color:var(--INK3);padding:1rem;">No matching entries.</div>';
+}
+
+function exportStudentHistory(id){
+  const s=students.find(x=>x.id==id);if(!s)return;
+  const hist=s.hist||[];
+  const rows=[['Date','Time','Reason','XP']];
+  hist.forEach(h=>rows.push([h.date,h.time,h.reason,h.amt]));
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download=s.name.replace(/\s+/g,'_')+'_xp_history.csv';
+  a.click();
+}
+
+/* ── ASSIGNMENT CATEGORY EDITOR ── */
+function renderCategoryTable(){
+  const tb=document.getElementById('cat-tbody');if(!tb)return;
+  tb.innerHTML=xpCategories.map((c,i)=>`<tr>
+    <td><input value="${c.name}" onchange="xpCategories[${i}].name=this.value;save();" style="width:100%;"/></td>
+    <td><input type="number" value="${c.sub}" min="0" onchange="xpCategories[${i}].sub=parseInt(this.value)||0;save();" style="width:75px;"/></td>
+    <td><input type="number" value="${c.bonus85}" min="0" onchange="xpCategories[${i}].bonus85=parseInt(this.value)||0;save();" style="width:75px;"/></td>
+    <td><input type="number" value="${c.bonus100}" min="0" onchange="xpCategories[${i}].bonus100=parseInt(this.value)||0;save();" style="width:75px;"/></td>
+    <td><button class="btn bd bxs" onclick="rmCategory(${i})">✕</button></td>
+  </tr>`).join('');
+}
+
+function addCategory(){
+  const name=document.getElementById('cat-name').value.trim();
+  if(!name){showEB('Enter a category name.');return;}
+  xpCategories.push({
+    name,
+    sub:parseInt(document.getElementById('cat-sub').value)||25,
+    bonus85:parseInt(document.getElementById('cat-85').value)||15,
+    bonus100:parseInt(document.getElementById('cat-100').value)||25
+  });
+  document.getElementById('cat-name').value='';
+  save();renderCategoryTable();
+}
+
+function rmCategory(i){xpCategories.splice(i,1);save();renderCategoryTable();}
+
+function clearAwardedIds(){
+  if(!confirm('This clears the record of which submissions already received XP. Re-syncing will re-award XP for all past submissions. Only do this to reset testing. Continue?'))return;
+  awardedSubmissions={};autoAwardLog=[];save();renderAutoAwardLog();showEB('Award history cleared.');
+}
+
+function renderAutoAwardLog(){
+  const el=document.getElementById('auto-award-log');if(!el)return;
+  if(!autoAwardLog.length){el.innerHTML='<div style="font-size:13px;color:var(--INK3);">No auto-awards yet. Press Sync Assignments.</div>';return;}
+  el.innerHTML=autoAwardLog.slice(0,100).map(a=>
+    `<div class="auto-award-item">
+      <span><strong>${a.student}</strong> — ${a.assignment} <span style="font-size:11px;color:var(--INK3);">[${a.category}${a.score!==null?' · Score: '+a.score:''}]</span> <span style="font-size:11px;color:var(--INK3);">${a.date}</span></span>
+      <span class="auto-award-xp">+${a.xp} XP</span>
+    </div>`
+  ).join('');
+}
+
+function setAssignStatus(msg,color){
+  const el=document.getElementById('assign-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+}
+
+function addAssignLog(msg,type){
+  const el=document.getElementById('assign-log');if(!el)return;
+  const div=document.createElement('div');
+  div.className='assign-item '+(type||'');
+  div.textContent=msg;
+  el.insertBefore(div,el.firstChild);
+}
+
+// Saved marking periods (manual, since Google Classroom API does not expose grading periods to teachers)
+let savedPeriods=[];
+
+let selectedSyncClasses=new Set();// empty = all classes
+
+function renderAssignClassPills(){
+  const el=document.getElementById('cp-assign');if(!el)return;
+  const cls=getCls();
+  // Init selectedSyncClasses to all if empty
+  if(selectedSyncClasses.size===0)cls.forEach(c=>selectedSyncClasses.add(c));
+  el.innerHTML=cls.map(c=>`<span class="pill${selectedSyncClasses.has(c)?' active':''}" onclick="toggleSyncClass('${c}')">${c}</span>`).join('');
+}
+
+function toggleSyncClass(c){
+  if(selectedSyncClasses.has(c))selectedSyncClasses.delete(c);
+  else selectedSyncClasses.add(c);
+  renderAssignClassPills();
+}
+
+function manualFetchGP(){
+  if(!gcToken){
+    if(!tclient){
+      tclient=google.accounts.oauth2.initTokenClient({
+        client_id:GCL_ID,
+        scope:'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.rosters.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly https://www.googleapis.com/auth/classroom.student-submissions.students.readonly',
+        callback:(resp)=>{
+          if(resp.error){showEB('Could not authorize. Try syncing Google Classroom first.');return;}
+          gcToken=resp.access_token;
+          tryFetchGradingPeriods();
+        }
+      });
+    }
+    tclient.requestAccessToken();
+    return;
+  }
+  showEB('Fetching grading periods from Google Classroom...');
+  tryFetchGradingPeriods();
+}
+
+function loadSavedPeriods(){
+  const stored=localStorage.getItem('dq_periods');
+  if(stored)savedPeriods=JSON.parse(stored);
+  refreshGPSelect();
+  // Also try to auto-fetch grading periods from gradebookSettings if we have a token
+  if(gcToken)tryFetchGradingPeriods();
+}
+
+function tryFetchGradingPeriods(){
+  fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=20',{headers:{Authorization:'Bearer '+gcToken}})
+  .then(r=>r.json())
+  .then(data=>{
+    if(!data.courses||!data.courses.length)return;
+    // Try each course until we find grading period data
+    const tryNext=(idx)=>{
+      if(idx>=data.courses.length)return;
+      fetch(`https://classroom.googleapis.com/v1/courses/${data.courses[idx].id}`,{headers:{Authorization:'Bearer '+gcToken}})
+      .then(r=>r.json())
+      .then(course=>{
+        // Check gradebookSettings for grading periods
+        const gb=course.gradebookSettings;
+        const periods=gb?.gradingPeriods||gb?.grading_periods||[];
+        if(periods.length){
+          // Merge with saved periods, avoiding duplicates by name
+          let added=0;
+          periods.forEach(p=>{
+            const name=p.title||p.name||p.gradingPeriodId||'Period';
+            const start=formatGPDate(p.startDate||p.start_date);
+            const end=formatGPDate(p.endDate||p.end_date);
+            if(!start||!end)return;
+            if(!savedPeriods.find(s=>s.name===name&&s.start===start)){
+              savedPeriods.push({name,start,end,auto:true});added++;
+            }
+          });
+          if(added>0){savePeriods();showEB(`Loaded ${added} grading period${added!==1?'s':''} from Google Classroom automatically.`);}
+          return;
+        }
+        tryNext(idx+1);
+      })
+      .catch(()=>tryNext(idx+1));
+    };
+    tryNext(0);
+  })
+  .catch(()=>{});// Silent fail — manual periods still work
+}
+
+function formatGPDate(d){
+  if(!d)return null;
+  // Handle {year, month, day} object
+  if(typeof d==='object'&&d.year)return`${d.year}-${String(d.month).padStart(2,'0')}-${String(d.day).padStart(2,'0')}`;
+  // Handle ISO string
+  if(typeof d==='string')return d.slice(0,10);
+  return null;
+}
+function savePeriods(){
+  localStorage.setItem('dq_periods',JSON.stringify(savedPeriods));
+  refreshGPSelect();
+}
+function refreshGPSelect(){
+  const sel=document.getElementById('gp-select');if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="all">All assignments (no filter)</option>';
+  savedPeriods.forEach((p,i)=>{
+    const opt=document.createElement('option');
+    opt.value=String(i);
+    opt.textContent=p.name+' ('+p.start+' → '+p.end+')';
+    sel.appendChild(opt);
+  });
+  if(cur!=='all'){const idx=parseInt(cur);if(!isNaN(idx)&&idx<savedPeriods.length)sel.value=cur;}
+}
+function onGPSelect(){
+  const sel=document.getElementById('gp-select');
+  const v=sel.value;
+  if(v==='all'){
+    document.getElementById('mp-start').value='';
+    document.getElementById('mp-end').value='';
+  } else {
+    const p=savedPeriods[parseInt(v)];
+    if(p){document.getElementById('mp-start').value=p.start;document.getElementById('mp-end').value=p.end;}
+  }
+}
+function openAddGP(){
+  const name=prompt('Name for this marking period (e.g. Marking Period 4):');
+  if(!name)return;
+  const start=document.getElementById('mp-start').value;
+  const end=document.getElementById('mp-end').value;
+  if(!start||!end){showEB('Enter start and end dates first, then save the period.');return;}
+  savedPeriods.push({name:name.trim(),start,end});
+  savePeriods();
+  const sel=document.getElementById('gp-select');
+  sel.value=String(savedPeriods.length-1);
+  showEB('Saved +name+ as a marking period.');
+}
+function deleteGP(){
+  const sel=document.getElementById('gp-select');
+  const v=sel.value;
+  if(v==='all'){showEB('Select a saved period to remove.');return;}
+  const idx=parseInt(v);
+  if(isNaN(idx))return;
+  const name=savedPeriods[idx]?.name||'period';
+  savedPeriods.splice(idx,1);
+  savePeriods();
+  sel.value='all';onGPSelect();
+  showEB('Removed +name+.');
+}
+
+
+function syncAssignments(){
+  if(!gcToken){
+    if(!tclient){
+      tclient=google.accounts.oauth2.initTokenClient({
+        client_id:GCL_ID,
+        scope:'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.rosters.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly https://www.googleapis.com/auth/classroom.student-submissions.students.readonly',
+        callback:(resp)=>{
+          if(resp.error){showEB('Auth failed: '+resp.error);return;}
+          gcToken=resp.access_token;syncAssignments();
+        }
+      });
+    }
+    tclient.requestAccessToken();return;
+  }
+  if(!xpCategories.length){showEB('No XP categories configured. Add at least one in the Assignments tab.');return;}
+
+  // Get grading period / date filter
+  let mpStart=null,mpEnd=null;
+  let filterDesc='all assignments';
+  const gpSel=document.getElementById('gp-select');
+  const gpVal=gpSel?gpSel.value:'all';
+
+  if(gpVal&&gpVal!=='all'){
+    // Check if it's a saved manual period index
+    const idx=parseInt(gpVal);
+    if(!isNaN(idx)&&savedPeriods[idx]){
+      const p=savedPeriods[idx];
+      if(p.start)mpStart=new Date(p.start+'T00:00:00');
+      if(p.end)mpEnd=new Date(p.end+'T23:59:59');
+      filterDesc=p.name+' ('+p.start+' → '+p.end+')';
+    } else {
+      // Try JSON parse for auto-loaded Classroom periods
+      try{
+        const gp=JSON.parse(gpVal);
+        if(gp&&gp.start){
+          mpStart=new Date(gp.start.year,gp.start.month-1,gp.start.day);
+          mpEnd=new Date(gp.end.year,gp.end.month-1,gp.end.day,23,59,59);
+          filterDesc=gpSel.options[gpSel.selectedIndex]?.text||'selected grading period';
+        }
+      }catch(e){}
+    }
+  }
+
+  // Always also read date fields as override — if user typed dates they take priority
+  const mpStartVal=document.getElementById('mp-start')?.value;
+  const mpEndVal=document.getElementById('mp-end')?.value;
+  if(mpStartVal){mpStart=new Date(mpStartVal+'T00:00:00');if(filterDesc==='all assignments')filterDesc='from '+mpStartVal;}
+  if(mpEndVal){mpEnd=new Date(mpEndVal+'T23:59:59');if(!mpStartVal||filterDesc.startsWith('from'))filterDesc+=' to '+mpEndVal;}
+
+  const logEl=document.getElementById('assign-log');if(logEl)logEl.innerHTML='';
+  document.getElementById('flagged-section').style.display='none';
+  document.getElementById('flagged-list').innerHTML='';
+  setAssignStatus('Fetching courses...','var(--GO)');
+  addAssignLog(`Starting sync — filter: ${filterDesc}...`,'info');
+
+  const flagged=[];
+
+  fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=50',{headers:{Authorization:'Bearer '+gcToken}})
+  .then(r=>r.json())
+  .then(data=>{
+    if(!data.courses||!data.courses.length){setAssignStatus('No active courses found.','var(--GM)');return Promise.reject('no courses');}
+
+    // Only sync courses matching selected roster classes
+    const rosterClasses=selectedSyncClasses.size>0
+      ?selectedSyncClasses
+      :new Set(students.map(s=>s.cls).filter(Boolean));
+
+    const matchedCourses=data.courses.filter(course=>{
+      return [...rosterClasses].some(cls=>
+        cls===course.name||
+        cls.startsWith(course.name)||
+        (course.section&&cls===course.name+' — '+course.section)||
+        (course.section&&cls===course.name+' ('+course.section+')')
+      );
+    });
+
+    if(!matchedCourses.length){
+      // Fallback — if no matches found, use all courses to avoid leaving user stuck
+      addAssignLog(`No exact course matches found in roster — syncing all ${data.courses.length} courses as fallback.`,'info');
+      addAssignLog(`Roster classes: ${[...rosterClasses].join(', ')}`, 'info');
+    }
+
+    const coursesToSync=matchedCourses.length?matchedCourses:data.courses;
+    addAssignLog(`Syncing ${coursesToSync.length} of ${data.courses.length} active course${data.courses.length!==1?'s':''} (matched to roster).`,'info');
+
+    // Fetch all courseWork with pagination
+    const fetchAllWork=(courseId,pageToken='')=>{
+      const url=`https://classroom.googleapis.com/v1/courses/${courseId}/courseWork?pageSize=100${pageToken?'&pageToken='+pageToken:''}`;
+      return fetch(url,{headers:{Authorization:'Bearer '+gcToken}})
+      .then(r=>r.json())
+      .then(cw=>{
+        const work=cw.courseWork||[];
+        if(cw.nextPageToken){
+          return fetchAllWork(courseId,cw.nextPageToken).then(more=>work.concat(more));
+        }
+        return work;
+      })
+      .catch(()=>[]);
+    };
+
+    return Promise.all(coursesToSync.map(course=>
+      fetchAllWork(course.id).then(work=>({course,work}))
+    ));
+  })
+  .then(courseWorkList=>{
+    const submissionPromises=[];
+    let totalWork=0;let filteredWork=0;
+    courseWorkList.forEach(({course,work})=>{
+      work.forEach(cw=>{
+        totalWork++;
+        // Apply marking period date filter using assignment creation or due date
+        if(mpStart||mpEnd){
+          const cwDate=cw.creationTime?new Date(cw.creationTime):null;
+          const dueDate=cw.dueDate?new Date(cw.dueDate.year,cw.dueDate.month-1,cw.dueDate.day):null;
+          const checkDate=dueDate||cwDate;
+          if(checkDate){
+            if(mpStart&&checkDate<mpStart)return;
+            if(mpEnd&&checkDate>mpEnd)return;
+          }
+        }
+        filteredWork++;
+        submissionPromises.push(
+          fetch(`https://classroom.googleapis.com/v1/courses/${course.id}/courseWork/${cw.id}/studentSubmissions?pageSize=150`,{headers:{Authorization:'Bearer '+gcToken}})
+          .then(r=>r.json())
+          .then(d=>({course,cw,submissions:d.studentSubmissions||[]}))
+          .catch(()=>({course,cw,submissions:[]}))
+        );
+      });
+    });
+    addAssignLog(`${filteredWork} assignments in marking period (${totalWork} total, ${totalWork-filteredWork} filtered out).`,'info');
+    return Promise.all(submissionPromises);
+  })
+  .then(results=>{
+    let totalAwarded=0;let totalXP=0;
+
+    results.forEach(({course,cw,submissions})=>{
+      const catName=cw.gradeCategory?.name||'';
+      const cat=xpCategories.find(c=>catName.toLowerCase()===c.name.toLowerCase()||catName.toLowerCase().includes(c.name.toLowerCase()));
+
+      submissions.forEach(sub=>{
+        const state=sub.state;
+        // States: NEW, CREATED, TURNED_IN, RETURNED, RECLAIMED_BY_STUDENT
+        const isTurnedIn=state==='TURNED_IN'||state==='RETURNED';
+        const isNew=state==='NEW'||state==='CREATED'; // Assigned but not submitted
+
+        if(!isTurnedIn)return; // Not submitted — skip silently
+
+        const submissionKey=sub.id;
+        if(awardedSubmissions[submissionKey])return; // Already processed
+
+        const s=students.find(x=>x.gid===sub.userId);
+        // Grade: assignedGrade is set when teacher grades, draftGrade is teacher's draft
+        // A missing/null assignedGrade means ungraded (submitted but not yet marked)
+        const rawGrade=sub.assignedGrade;
+        const hasGrade=rawGrade!==undefined&&rawGrade!==null&&rawGrade!=='';
+        const grade=hasGrade?parseFloat(rawGrade):null;
+        const maxPoints=parseFloat(cw.maxPoints)||100;
+        const pctScore=(grade!==null&&!isNaN(grade))?Math.round((grade/maxPoints)*100):null;
+
+        // Flag: no matching student
+        if(!s){
+          flagged.push({reason:'Student not in roster',assignment:cw.title,course:course.name,userId:sub.userId,score:pctScore});
+          awardedSubmissions[submissionKey]='flagged';
+          return;
+        }
+
+        // Flag: no matching category
+        if(!cat){
+          flagged.push({reason:`Category "${catName||'(none)'}" not configured`,assignment:cw.title,course:course.name,student:s.name,score:pctScore});
+          awardedSubmissions[submissionKey]='flagged';
+          return;
+        }
+
+        // Zero grade = explicitly marked as not completed — no XP
+        if(hasGrade&&(grade===0||isNaN(grade))){
+          awardedSubmissions[submissionKey]='zero';
+          flagged.push({reason:'Grade is 0 — no XP awarded',assignment:cw.title,course:course.name,student:s.name,score:0});
+          return;
+        }
+
+        let xpToAward=0;const reasons=[];
+
+        // Submit XP: award if turned in regardless of grade (unless grade is 0, handled above)
+        if(cat.sub>0){xpToAward+=cat.sub;reasons.push(`submitted (+${cat.sub})`);}
+
+        // Grade bonuses: only apply when teacher has actually graded
+        if(pctScore!==null){
+          if(pctScore===100&&cat.bonus100>0){xpToAward+=cat.bonus100;reasons.push(`perfect score (+${cat.bonus100})`);}
+          else if(pctScore>=85&&cat.bonus85>0){xpToAward+=cat.bonus85;reasons.push(`85%+ score (+${cat.bonus85})`);}
+        }
+        // Note: if pctScore===null (turned in but not yet graded), only Submit XP fires.
+        // Grade bonuses will fire on next sync once teacher grades it.
+
+        if(xpToAward===0){awardedSubmissions[submissionKey]=true;return;}
+
+        // Award XP
+        const prevLv=s.lv;
+        s.xp+=xpToAward;s.te+=xpToAward;s.lv=lvFromXP(s.xp);
+        if(!s.hist)s.hist=[];
+        const now=new Date();
+        const dateStr=now.toLocaleDateString();const timeStr=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+        s.hist.unshift({amt:xpToAward,reason:`${cw.title} (${reasons.join(', ')})`,time:timeStr,date:dateStr});
+        if(s.hist.length>200)s.hist.pop();
+        chkBadges(s);
+        awardedSubmissions[submissionKey]=true;
+
+        const logMsg=`${s.name} +${xpToAward} XP — "${cw.title}" [${catName}]${pctScore!==null?' · '+pctScore+'%':''} (${reasons.join(', ')})`;
+        addLog(logMsg,'xp');
+        autoAwardLog.unshift({student:s.name,assignment:cw.title,category:catName,score:pctScore,xp:xpToAward,date:dateStr+' '+timeStr,reasons:reasons.join(', ')});
+        if(autoAwardLog.length>500)autoAwardLog.pop();
+        if(s.lv>prevLv){addLog(`${s.name} → Level ${s.lv} — ${getRank(s.lv).name}! ${getRank(s.lv).icon}`,'level');luQueue.push(s);}
+
+        totalAwarded++;totalXP+=xpToAward;
+      });
+    });
+
+    // Show flagged items
+    if(flagged.length){
+      document.getElementById('flagged-section').style.display='block';
+      document.getElementById('flagged-list').innerHTML=flagged.map(f=>
+        `<div class="flagged-item">
+          <strong>${f.assignment}</strong> — ${f.course||''} ${f.student?'· '+f.student:''}<br/>
+          <span style="color:var(--INK3);">Reason: ${f.reason}${f.score!==null&&f.score!==undefined?' · Score: '+f.score+'%':''}</span>
+        </div>`
+      ).join('');
+      addAssignLog(`⚠️ ${flagged.length} submission${flagged.length!==1?'s':''} flagged for manual review.`,'error');
+    }
+
+    processLUQueue();save();render();renderAutoAwardLog();
+    const msg=`Sync complete — ${totalAwarded} award${totalAwarded!==1?'s':''}, ${totalXP} XP total.${flagged.length?' ⚠️ '+flagged.length+' flagged.':''}`;
+    setAssignStatus(msg,'var(--M)');
+    addAssignLog(msg);
+    showEB(`✅ ${totalAwarded} auto-award${totalAwarded!==1?'s':''} — ${totalXP} XP.${flagged.length?' ⚠️ '+flagged.length+' flagged.':''}`);
+  })
+  .catch(e=>{
+    if(e==='no courses')return;
+    setAssignStatus('Sync error: '+e.message,'#8B1A1A');
+    addAssignLog('Error: '+e.message,'error');
+    showEB('Assignment sync error: '+e.message);
+  });
+}
+</script>
+</body>
+</html>
