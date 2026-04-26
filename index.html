@@ -2145,32 +2145,60 @@ function syncAssignments(){
   const flagged=[];
 
   fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=50',{headers:{Authorization:'Bearer '+gcToken}})
-  .then(r=>r.json())
   .then(data=>{
     if(!data.courses||!data.courses.length){setAssignStatus('No active courses found.','var(--GM)');return Promise.reject('no courses');}
 
-    // Only sync courses matching selected roster classes
+    // Build a set of course IDs that actually have students in the roster
+    // This is the most reliable way — match by student Google IDs
+    const rosterGids=new Set(students.filter(s=>s.gid).map(s=>s.gid));
     const rosterClasses=selectedSyncClasses.size>0
       ?selectedSyncClasses
       :new Set(students.map(s=>s.cls).filter(Boolean));
 
-    const matchedCourses=data.courses.filter(course=>{
-      return [...rosterClasses].some(cls=>
-        cls===course.name||
-        cls.startsWith(course.name)||
-        (course.section&&cls===course.name+' — '+course.section)||
-        (course.section&&cls===course.name+' ('+course.section+')')
-      );
+    // For each course, check if any of its students are in our roster
+    // We do this by fetching rosters and cross-referencing
+    addAssignLog(`Checking ${data.courses.length} courses against roster...`,'info');
+
+    const checkCourseHasRosterStudents=(course)=>{
+      return fetch(`https://classroom.googleapis.com/v1/courses/${course.id}/students?pageSize=50`,{headers:{Authorization:'Bearer '+gcToken}})
+      .then(r=>r.json())
+      .then(d=>{
+        const courseStudents=d.students||[];
+        const hasMatch=courseStudents.some(st=>rosterGids.has(st.profile.id));
+        // Also check if class name is in selected sync classes
+        const nameMatch=[...rosterClasses].some(cls=>{
+          const cName=course.name.toLowerCase().trim();
+          const rName=cls.toLowerCase().trim();
+          return rName===cName||rName.startsWith(cName)||cName.startsWith(rName)||
+            (course.section&&rName.includes((course.section||'').toLowerCase()));
+        });
+        return hasMatch&&nameMatch;
+      })
+      .catch(()=>false);
+    };
+
+    return Promise.all(data.courses.map(course=>
+      checkCourseHasRosterStudents(course).then(match=>({course,match}))
+    )).then(results=>{
+      const matchedCourses=results.filter(r=>r.match).map(r=>r.course);
+      if(!matchedCourses.length){
+        addAssignLog(`No roster matches — falling back to name matching only.`,'info');
+        // Fallback to name matching
+        const nameMatched=data.courses.filter(course=>[...rosterClasses].some(cls=>{
+          const cName=course.name.toLowerCase().trim();
+          const rName=cls.toLowerCase().trim();
+          return rName===cName||rName.startsWith(cName)||cName.startsWith(rName);
+        }));
+        return nameMatched.length?nameMatched:data.courses;
+      }
+      matchedCourses.forEach(c=>addAssignLog(`✓ Matched: "${c.name}"${c.section?' ('+c.section+')':''}`, 'info'));
+      const skipped=data.courses.filter(c=>!matchedCourses.find(m=>m.id===c.id));
+      skipped.forEach(c=>addAssignLog(`✗ Skipped: "${c.name}"${c.section?' ('+c.section+')':''}`, 'info'));
+      return matchedCourses;
     });
-
-    if(!matchedCourses.length){
-      // Fallback — if no matches found, use all courses to avoid leaving user stuck
-      addAssignLog(`No exact course matches found in roster — syncing all ${data.courses.length} courses as fallback.`,'info');
-      addAssignLog(`Roster classes: ${[...rosterClasses].join(', ')}`, 'info');
-    }
-
-    const coursesToSync=matchedCourses.length?matchedCourses:data.courses;
-    addAssignLog(`Syncing ${coursesToSync.length} of ${data.courses.length} active course${data.courses.length!==1?'s':''} (matched to roster).`,'info');
+  })
+  .then(coursesToSync=>{
+    addAssignLog(`Syncing ${coursesToSync.length} course${coursesToSync.length!==1?'s':''}.`,'info');
 
     // Fetch all courseWork with pagination
     const fetchAllWork=(courseId,pageToken='')=>{
@@ -2179,9 +2207,7 @@ function syncAssignments(){
       .then(r=>r.json())
       .then(cw=>{
         const work=cw.courseWork||[];
-        if(cw.nextPageToken){
-          return fetchAllWork(courseId,cw.nextPageToken).then(more=>work.concat(more));
-        }
+        if(cw.nextPageToken)return fetchAllWork(courseId,cw.nextPageToken).then(more=>work.concat(more));
         return work;
       })
       .catch(()=>[]);
@@ -2222,9 +2248,16 @@ function syncAssignments(){
   .then(results=>{
     let totalAwarded=0;let totalXP=0;
 
+    // Log unique category names found for debugging
+    const foundCats=new Set(results.map(r=>r.cw.gradeCategory?.name||r.cw.workType||'(none)'));
+    addAssignLog(`Assignment categories found: ${[...foundCats].join(', ')}`, 'info');
+
     results.forEach(({course,cw,submissions})=>{
-      const catName=cw.gradeCategory?.name||'';
-      const cat=xpCategories.find(c=>catName.toLowerCase()===c.name.toLowerCase()||catName.toLowerCase().includes(c.name.toLowerCase()));
+      const catName=cw.gradeCategory?.name||cw.workType||'';
+      // Try exact match first, then partial match
+      const cat=xpCategories.find(c=>catName.toLowerCase()===c.name.toLowerCase())
+        ||xpCategories.find(c=>catName.toLowerCase().includes(c.name.toLowerCase()))
+        ||xpCategories.find(c=>c.name.toLowerCase().includes(catName.toLowerCase())&&catName.length>0);
 
       submissions.forEach(sub=>{
         const state=sub.state;
