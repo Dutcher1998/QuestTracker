@@ -1432,6 +1432,9 @@ function showTab(id){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('pnl-'+id).classList.add('active');
   document.getElementById('tab-'+id).classList.add('active');
+  // Re-render settings content on tab open since elements may not have been visible on initial render
+  if(id==='settings'){renderActsTable();renderPrivEditor();renderCustomBadges();renderSeasonRewards();renderXPLevelTable();}
+  if(id==='assignments'){renderCategoryTable();renderAutoAwardLog();renderAssignClassPills();}
 }
 function switchView(v){
   document.getElementById('vt-t').classList.toggle('active',v==='teacher');
@@ -1755,7 +1758,13 @@ function signOut(){curUser=null;isT=false;curSid=null;document.getElementById('S
 /* GOOGLE CLASSROOM SYNC — PICKER BASED */
 let allCourses=[];let syncSelected=new Set();
 
-function syncGC(){if(!gcToken){reqGCToken();return;}openSyncPicker();}
+function syncGC(){
+  if(typeof google==='undefined'){
+    loadGS(()=>syncGC());return;
+  }
+  if(!gcToken){reqGCToken();return;}
+  openSyncPicker();
+}
 function reqGCToken(){
   if(!tclient){tclient=google.accounts.oauth2.initTokenClient({
     client_id:GCL_ID,
@@ -1978,15 +1987,16 @@ function exportStudentHistory(id){
   a.click();
 }
 
-// Auto-restore session on page load
-(function(){
+// Auto-restore session on page load — wait for DOM to be ready
+document.addEventListener('DOMContentLoaded',function(){
+  // Refresh session timestamp on user activity
+  ['click','keydown'].forEach(ev=>document.addEventListener(ev,()=>{if(curUser)saveSession();},{passive:true}));
+  // Check for valid saved session
   if(loadSession()){
-    // Valid session found — restore without Google sign-in prompt
     completeSignIn();
   }
-  // Refresh session timestamp on user activity (resets the 30-minute clock)
-  ['click','keydown'].forEach(ev=>document.addEventListener(ev,()=>{if(curUser)saveSession();},{passive:true}));
-})();
+  // Otherwise show sign-in screen (already visible by default)
+});
 
 /* ── ASSIGNMENT CATEGORY EDITOR ── */
 function renderCategoryTable(){
