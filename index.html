@@ -1989,41 +1989,46 @@ function loadSavedPeriods(){
 }
 
 function tryFetchGradingPeriods(){
-  fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=20',{headers:{Authorization:'Bearer '+gcToken}})
+  fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=10',{headers:{Authorization:'Bearer '+gcToken}})
   .then(r=>r.json())
   .then(data=>{
     if(!data.courses||!data.courses.length)return;
-    // Try each course until we find grading period data
+    // Try the dedicated gradingPeriodSettings sub-resource on each course
     const tryNext=(idx)=>{
       if(idx>=data.courses.length)return;
-      fetch(`https://classroom.googleapis.com/v1/courses/${data.courses[idx].id}`,{headers:{Authorization:'Bearer '+gcToken}})
-      .then(r=>r.json())
-      .then(course=>{
-        // Check gradebookSettings for grading periods
-        const gb=course.gradebookSettings;
-        const periods=gb?.gradingPeriods||gb?.grading_periods||[];
-        if(periods.length){
-          // Merge with saved periods, avoiding duplicates by name
-          let added=0;
-          periods.forEach(p=>{
-            const name=p.title||p.name||p.gradingPeriodId||'Period';
-            const start=formatGPDate(p.startDate||p.start_date);
-            const end=formatGPDate(p.endDate||p.end_date);
-            if(!start||!end)return;
-            if(!savedPeriods.find(s=>s.name===name&&s.start===start)){
-              savedPeriods.push({name,start,end,auto:true});added++;
-            }
-          });
-          if(added>0){savePeriods();showEB(`Loaded ${added} grading period${added!==1?'s':''} from Google Classroom automatically.`);}
-          return;
+      const courseId=data.courses[idx].id;
+      fetch(`https://classroom.googleapis.com/v1/courses/${courseId}/gradingPeriodSettings`,{
+        headers:{Authorization:'Bearer '+gcToken}
+      })
+      .then(r=>{
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        return r.json();
+      })
+      .then(data=>{
+        const periods=(data.gradingPeriods||[]).filter(p=>p.title&&p.startDate&&p.endDate);
+        if(!periods.length){tryNext(idx+1);return;}
+        let added=0;
+        periods.forEach(p=>{
+          const name=p.title;
+          const start=formatGPDate(p.startDate);
+          const end=formatGPDate(p.endDate);
+          if(!start||!end)return;
+          if(!savedPeriods.find(s=>s.name===name&&s.start===start)){
+            savedPeriods.push({name,start,end,auto:true});added++;
+          }
+        });
+        if(added>0){
+          savePeriods();
+          showEB(`Loaded ${added} grading period${added!==1?'s':''} from Google Classroom.`);
+        } else {
+          showEB('Grading periods already saved — no new ones to add.');
         }
-        tryNext(idx+1);
       })
       .catch(()=>tryNext(idx+1));
     };
     tryNext(0);
   })
-  .catch(()=>{});// Silent fail — manual periods still work
+  .catch(()=>{});
 }
 
 function formatGPDate(d){
