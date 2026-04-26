@@ -598,8 +598,13 @@ html,body{scroll-behavior:auto;}
           </div>
         </div>
       </div>
-        <div class="reset-warn">⚠️ This will reset all student XP to zero and levels to 1. Students keep custom badges and the Legend badge (if earned). Each student receives a tiered season badge — 🏛️ Season Recruit, 🏅 Season Soldier, 🎗️ Season Captain, or 👑 Season General — based on their rank at reset. Cannot be undone.</div>
+        <div class="reset-warn">⚠️ This will reset all student XP to zero and levels to 1. Students keep custom badges, the Legend badge (if earned). Each student receives a tiered season badge based on their final rank. Cannot be undone.</div>
         <button class="btn bd" onclick="seasonReset()">Reset Season</button>
+      </div>
+      <div class="aws">
+        <h3>Season end rewards — configure per rank</h3>
+        <p style="font-size:13px;color:var(--INK3);margin-bottom:1rem;">Set physical or class rewards students earn at the end of each season based on their final rank. These display on the student's profile.</p>
+        <div id="season-rewards-editor"></div>
       </div>
     </div>
   </div>
@@ -711,9 +716,9 @@ const BADGES=[
   {id:'cp',label:'Captain',desc:'Reached Captain',icon:'🎖️',chk:s=>s.lv>=10,bg:'#F8EDEF',tx:'#6B1A2A'},
   {id:'gn',label:'General',desc:'Reached General',icon:'👑',chk:s=>s.lv>=15,bg:'#F0E0E4',tx:'#3D0A14'},
   {id:'lg',label:'Legend',desc:'Level 20',icon:'⭐',chk:s=>s.lv>=20,bg:'#3D0A14',tx:'#E8C97A'},
-  {id:'sv_recruit',label:'Season Recruit',desc:'Completed a season at Recruit rank',icon:'🏛️',chk:s=>false,bg:'#EAEAEA',tx:'#3A3A3A'},
-  {id:'sv_soldier',label:'Season Soldier',desc:'Completed a season at Soldier rank',icon:'🏅',chk:s=>false,bg:'#F0EAF5',tx:'#5A3A6B'},
-  {id:'sv_captain',label:'Season Captain',desc:'Completed a season at Captain rank',icon:'🎗️',chk:s=>false,bg:'#F8EDEF',tx:'#6B1A2A'},
+  {id:'sv_recruit',label:'Season Recruit',desc:'Completed a season at Recruit rank',icon:'🛡️',chk:s=>false,bg:'#EAEAEA',tx:'#3A3A3A'},
+  {id:'sv_soldier',label:'Season Soldier',desc:'Completed a season at Soldier rank',icon:'⚔️',chk:s=>false,bg:'#F0EAF5',tx:'#5A3A6B'},
+  {id:'sv_captain',label:'Season Captain',desc:'Completed a season at Captain rank',icon:'🎖️',chk:s=>false,bg:'#F8EDEF',tx:'#6B1A2A'},
   {id:'sv_general',label:'Season General',desc:'Completed a season at General rank',icon:'👑',chk:s=>false,bg:'#F0E0E4',tx:'#3D0A14'}
 ];
 const AVC=[
@@ -759,12 +764,18 @@ let xpCategories=[
   {name:'Quiz',sub:10,bonus85:10,bonus100:20}
 ];
 let autoAwardLog=[];
+let seasonRewards={
+  sv_recruit:'Certificate of participation',
+  sv_soldier:'Homework pass for next marking period',
+  sv_captain:'Free period pass + certificate',
+  sv_general:'Trophy + free period pass + certificate'
+};
 let selIds=new Set(),curUser=null,isT=false,curSid=null,gcToken=null,tclient=null;
 let rcls='All',acls='All',lcls='All',pvcls='All';
 let undoStack=null,undoTimer=null;
 let luQueue=[];
 
-function mkS(name,idx,cls){return{id:'s'+Date.now()+Math.random(),name,xp:0,lv:1,te:0,badges:[],ai:idx%AVC.length,gid:null,cls:cls||'General',pic:null,hist:[]};}
+function mkS(name,idx,cls){return{id:'s'+Date.now()+Math.random(),name,xp:0,lv:1,te:0,badges:[],ai:idx%AVC.length,gid:null,cls:cls||'General',pic:null,hist:[],seasonBadges:{}};}
 function getCls(){return[...new Set(students.map(s=>s.cls).filter(Boolean))].sort();}
 function getRank(lv){return RANKS.find(r=>lv>=r.min&&lv<=r.max)||RANKS[0];}
 function lvFromXP(xp){let l=1;for(let i=1;i<=20;i++){if(xp>=LVS[i])l=i+1;else break;}return Math.min(l,20);}
@@ -866,7 +877,7 @@ function save(){
     localStorage.setItem('dq_cb',JSON.stringify(customBadges));
     localStorage.setItem('dq_cats',JSON.stringify(xpCategories));
     localStorage.setItem('dq_awarded',JSON.stringify(awardedSubmissions));
-    localStorage.setItem('dq_aal',JSON.stringify(autoAwardLog));
+    localStorage.setItem('dq_sr',JSON.stringify(seasonRewards));
   }catch(e){}
 }
 function load(){
@@ -879,6 +890,7 @@ function load(){
     const cats=localStorage.getItem('dq_cats');if(cats)xpCategories=JSON.parse(cats);
     const aw=localStorage.getItem('dq_awarded');if(aw)awardedSubmissions=JSON.parse(aw);
     const aal=localStorage.getItem('dq_aal');if(aal)autoAwardLog=JSON.parse(aal);
+    const sr=localStorage.getItem('dq_sr');if(sr)seasonRewards=JSON.parse(sr);
   }catch(e){}
 }
 
@@ -917,12 +929,6 @@ function spawnConfetti(){
 }
 
 /* AVATAR */
-function avHTML(s,size){
-  const fs=Math.round(size*0.32);
-  if(s.pic){return`<img class="av" src="${s.pic}" alt="${ini(s.name)}" style="width:${size}px;height:${size}px;" onerror="this.outerHTML='<div class=\\'av-text\\' style=\\'width:${size}px;height:${size}px;font-size:${fs}px;background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};\\'>${ini(s.name)}</div>'">`;}
-  return`<div class="av-text" style="width:${size}px;height:${size}px;font-size:${fs}px;background:${AVC[s.ai||0].bg};color:${AVC[s.ai||0].tx};">${ini(s.name)}</div>`;
-}
-
 /* RENDER */
 function updHero(){
   const avg=students.length?Math.round(students.reduce((a,s)=>a+s.lv,0)/students.length):0;
@@ -1189,7 +1195,25 @@ function addPriv(){
 }
 function rmPriv(i){const sp=[...privs].sort((a,b)=>a.level-b.level);sp.splice(i,1);privs=sp;save();renderPrivEditor();}
 
-function render(){renderRoster();renderAwardGrid();renderLB();renderCVC();renderQuests();renderLog();renderActsTable();renderPrivEditor();renderXPBtns();renderCustomBadges();renderCategoryTable();renderAutoAwardLog();renderXPLevelTable();renderAssignClassPills();}
+function render(){renderRoster();renderAwardGrid();renderLB();renderCVC();renderQuests();renderLog();renderActsTable();renderPrivEditor();renderXPBtns();renderCustomBadges();renderCategoryTable();renderAutoAwardLog();renderXPLevelTable();renderAssignClassPills();renderSeasonRewards();}
+
+function renderSeasonRewards(){
+  const el=document.getElementById('season-rewards-editor');if(!el)return;
+  const tiers=[
+    {id:'sv_recruit',icon:'🛡️',label:'Recruit'},
+    {id:'sv_soldier',icon:'⚔️',label:'Soldier'},
+    {id:'sv_captain',icon:'🎖️',label:'Captain'},
+    {id:'sv_general',icon:'👑',label:'General'}
+  ];
+  el.innerHTML=tiers.map(t=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--BDG);">
+      <span style="font-size:18px;flex-shrink:0;">${t.icon}</span>
+      <span style="font-family:'Cinzel',serif;font-size:12px;min-width:80px;color:var(--MD);">${t.label}</span>
+      <input class="fi" style="flex:1;" value="${seasonRewards[t.id]||''}" 
+        placeholder="Reward for ${t.label} rank..."
+        onchange="seasonRewards['${t.id}']=this.value;save();"/>
+    </div>`).join('');
+}
 
 function renderXPLevelTable(){
   const tb=document.getElementById('xp-level-tbody');if(!tb)return;
@@ -1255,29 +1279,29 @@ function refetchPhotos(){
 /* SEASON RESET */
 function seasonReset(){
   if(!confirm('Reset the season? All XP and levels will be cleared. Students keep custom badges, the Legend badge if earned, and receive a tiered season badge based on their final rank. This CANNOT be undone.'))return;
-  // IDs to strip: all auto badges except sv_ season badges and lg (Legend)
-  const keepIds=['lg'];// Legend persists
+  const keepIds=['lg'];
   const svIds=['sv_recruit','sv_soldier','sv_captain','sv_general'];
   const autoIds=BADGES.map(b=>b.id).filter(id=>!keepIds.includes(id)&&!svIds.includes(id));
+  const seasonNum=Object.keys(students[0]?.seasonBadges||{}).reduce((a,k)=>a+(students[0].seasonBadges[k]||0),0)+1;
 
   students.forEach(s=>{
-    // Determine tiered badge based on CURRENT level before reset
     let seasonBadge='sv_recruit';
     if(s.lv>=15)seasonBadge='sv_general';
     else if(s.lv>=10)seasonBadge='sv_captain';
     else if(s.lv>=5)seasonBadge='sv_soldier';
 
-    // Strip automatic XP/rank badges, keep Legend, custom, and existing season badges
-    s.badges=s.badges.filter(id=>!autoIds.includes(id));
+    // Strip automatic XP/rank badges, keep Legend and custom
+    s.badges=s.badges.filter(id=>!autoIds.includes(id)&&!svIds.includes(id));
 
-    // Award this season's tiered badge
-    if(!s.badges.includes(seasonBadge))s.badges.push(seasonBadge);
+    // Increment seasonBadges count
+    if(!s.seasonBadges)s.seasonBadges={};
+    s.seasonBadges[seasonBadge]=(s.seasonBadges[seasonBadge]||0)+1;
 
     // Reset XP and level
     s.xp=0;s.lv=1;s.te=0;
   });
-  addLog('Season reset. Tiered season badges awarded based on final ranks.','event');
-  save();render();showEB('Season reset complete. Students received tiered season badges matching their final rank. Legend badges preserved.');
+  addLog(`Season reset (Season ${seasonNum}). Tiered season badges awarded.`,'event');
+  save();render();showEB(`Season ${seasonNum} reset complete. Tiered season badges awarded based on final ranks.`);
 }
 
 /* MODAL */
@@ -1315,7 +1339,21 @@ function openM(id){
     ${hist.length>20?`<button class="btn bg bsm" style="margin-bottom:1rem;" onclick="openFullHistory('${s.id}')">View all ${hist.length} entries</button>`:''}
     <div class="dst2">Badges</div>
     <div class="bgd">
-      ${[...BADGES,...(customBadges||[])].map(b=>{const e=s.badges.includes(b.id);return`<span class="bch${e?'':' bl'}" style="background:${b.bg};color:${b.tx};" title="${b.desc}">${b.icon} ${b.label}</span>`;}).join('')}
+      ${[...BADGES,...(customBadges||[])].filter(b=>!b.id.startsWith('sv_')).map(b=>{const e=s.badges.includes(b.id);return`<span class="bch${e?'':' bl'}" style="background:${b.bg};color:${b.tx};" title="${b.desc}">${b.icon} ${b.label}</span>`;}).join('')}
+    </div>
+    <div class="dst2">Season history</div>
+    <div class="bgd" style="margin-bottom:1rem;">
+      ${(()=>{
+        const sb=s.seasonBadges||{};
+        const svBadges=BADGES.filter(b=>b.id.startsWith('sv_'));
+        const earned=svBadges.filter(b=>sb[b.id]>0);
+        if(!earned.length)return'<span style="font-size:12px;color:var(--INK3);">No season history yet.</span>';
+        return earned.map(b=>{
+          const count=sb[b.id]||0;
+          const reward=seasonRewards[b.id]||'';
+          return`<span class="bch" style="background:${b.bg};color:${b.tx};" title="${b.label}${reward?' — Reward: '+reward:''}">${b.icon} ${b.label}${count>1?' <strong>x'+count+'</strong>':''}</span>`;
+        }).join('');
+      })()}
     </div>
     <div class="dst2">Privileges</div>
     <div style="margin-bottom:1rem;">
@@ -1457,8 +1495,10 @@ function renderSV(){
   const sorted=[...students].sort((a,b)=>b.lv-a.lv);
   const sp=[...privs].sort((a,b)=>a.level-b.level);
   const allBadges=[...BADGES,...(customBadges||[])];
-  const eb=allBadges.filter(b=>s.badges.includes(b.id));
+  const eb=allBadges.filter(b=>s.badges.includes(b.id)&&!b.id.startsWith('sv_'));
   const lb2=allBadges.filter(b=>!s.badges.includes(b.id)&&!b.id.startsWith('sv_'));
+  const svBadgeList=BADGES.filter(b=>b.id.startsWith('sv_'));
+  const sb=s.seasonBadges||{};
   const avatarIcon=s.avatarIcon||'⚔️';
   const motto=s.motto||'';
 
@@ -1496,6 +1536,16 @@ function renderSV(){
         ${eb.length===0?'<span style="font-size:13px;color:var(--INK3);">No badges yet — keep earning XP!</span>':''}
       </div>
     </div>
+    ${svBadgeList.some(b=>sb[b.id]>0)?`<div class="ss"><h2>🏛️ Season History</h2>
+      ${svBadgeList.filter(b=>sb[b.id]>0).map(b=>{
+        const count=sb[b.id];
+        const reward=seasonRewards[b.id]||'';
+        return`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--BDG);">
+          <span class="bch" style="background:${b.bg};color:${b.tx};">${b.icon} ${b.label}${count>1?' <strong>×'+count+'</strong>':''}</span>
+          ${reward?`<span style="font-size:13px;color:var(--INK3);">🎁 ${reward}</span>`:''}
+        </div>`;
+      }).join('')}
+    </div>`:''}
     <div class="ss"><h2>🏆 Class Leaderboard</h2>
       ${sorted.map((st,i)=>{const r=getRank(st.lv);const me=st.id==s.id;const md=['🥇','🥈','🥉'];
         return`<div class="slr${me?' me':''}">
@@ -1626,6 +1676,31 @@ function matchUser(user){
 }
 
 /* AUTH */
+const SESSION_KEY='dq_session';
+const SESSION_EXPIRY=30*60*1000;// 30 minutes
+
+function saveSession(){
+  if(!curUser)return;
+  sessionStorage.setItem(SESSION_KEY,JSON.stringify({user:curUser,isT,ts:Date.now()}));
+}
+
+function loadSession(){
+  try{
+    const raw=sessionStorage.getItem(SESSION_KEY);
+    if(!raw)return false;
+    const s=JSON.parse(raw);
+    if(!s.user||!s.ts)return false;
+    if(Date.now()-s.ts>SESSION_EXPIRY){sessionStorage.removeItem(SESSION_KEY);return false;}
+    curUser=s.user;isT=s.isT;
+    return true;
+  }catch(e){return false;}
+}
+
+function touchSession(){
+  // Refresh session timestamp on activity
+  if(curUser)saveSession();
+}
+
 function signIn(){if(typeof google==='undefined'){loadGS(()=>initGA(true));}else{initGA(true);}}
 function loadGS(cb){const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=cb;document.head.appendChild(s);}
 function initGA(auto){google.accounts.id.initialize({client_id:GCL_ID,callback:handleCred,auto_select:false});if(auto)google.accounts.id.prompt();}
@@ -1642,6 +1717,7 @@ function completeSignIn(){
   appEl.style.display='flex';appEl.style.flexDirection='column';
   load();
   loadSavedPeriods();
+  saveSession();// Persist session for 30 minutes
   if(curUser){
     document.getElementById('UP').style.display='flex';
     document.getElementById('UNL').textContent=curUser.name;
@@ -1901,6 +1977,16 @@ function exportStudentHistory(id){
   a.download=s.name.replace(/\s+/g,'_')+'_xp_history.csv';
   a.click();
 }
+
+// Auto-restore session on page load
+(function(){
+  if(loadSession()){
+    // Valid session found — restore without Google sign-in prompt
+    completeSignIn();
+  }
+  // Refresh session timestamp on user activity (resets the 30-minute clock)
+  ['click','keydown'].forEach(ev=>document.addEventListener(ev,()=>{if(curUser)saveSession();},{passive:true}));
+})();
 
 /* ── ASSIGNMENT CATEGORY EDITOR ── */
 function renderCategoryTable(){
