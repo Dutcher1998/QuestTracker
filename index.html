@@ -1275,16 +1275,23 @@ function awardQuestXP(i){
 function exportCSV(){
   const rows=[['Name','Class','Level','XP','Total XP Earned','Badges']];
   students.forEach(s=>rows.push([s.name,s.cls,s.lv,s.xp,s.te,s.badges.join(';')]));
-  const csv=rows.map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');
-  dl('quest-roster.csv','data:text/csv;charset=utf-8,'+encodeURIComponent(csv));
+  const csv=rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  dl('quest-roster.csv','\uFEFF'+csv);
 }
 function exportReport(){
   const rows=[['Name','Class','Level','XP','Rank','Badges Earned']];
   [...students].sort((a,b)=>b.xp-a.xp).forEach(s=>rows.push([s.name,s.cls,s.lv,s.xp,getRank(s.lv).name,s.badges.length]));
-  const csv=rows.map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');
-  dl('quest-xp-report.csv','data:text/csv;charset=utf-8,'+encodeURIComponent(csv));
+  const csv=rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  dl('quest-xp-report.csv','\uFEFF'+csv);
 }
-function dl(name,href){const a=document.createElement('a');a.href=href;a.download=name;a.click();}
+function dl(name,csv){
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=name;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
 
 function clearRoster(){
   if(!confirm('This will remove ALL students, XP history, and the event log. Cannot be undone. Continue?'))return;
@@ -2079,11 +2086,8 @@ function exportStudentHistory(id){
   const hist=s.hist||[];
   const rows=[['Date','Time','Reason','XP']];
   hist.forEach(h=>rows.push([h.date,h.time,h.reason,h.amt]));
-  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
-  a.download=s.name.replace(/\s+/g,'_')+'_xp_history.csv';
-  a.click();
+  const csv=rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  dl(s.name.replace(/\s+/g,'_')+'_xp_history.csv','\uFEFF'+csv);
 }
 
 // Auto-restore session on page load — wait for DOM to be ready
@@ -2318,10 +2322,15 @@ function exportPrivileges(){
   });
 
   const csv=rows.map(r=>r.map(c=>`"${String(c===undefined||c===null?'':c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
-  a.download=`privileges-report-${date.replace(/\//g,'-')}.csv`;
+  a.href=url;
+  a.download=`privileges-report.csv`;
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
   showEB('Privileges report exported with full detail.');
 }
 
