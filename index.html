@@ -956,7 +956,16 @@ function setPVC(c){
 
 function sCard(s,forAward){
   const rk=getRank(s.lv);const p=pct(s);const sel=selIds.has(s.id);
-  const bdg=s.badges.slice(-2).map(bid=>{const b=BADGES.find(x=>x.id===bid);return b?`<span class="bdg" style="background:${b.bg};color:${b.tx};">${b.icon} ${b.label}</span>`:''}).join('');
+  // Show up to 2 regular badges + season badges
+  const regularBdg=s.badges.slice(-2).map(bid=>{
+    const b=BADGES.find(x=>x.id===bid)||customBadges.find(x=>x.id===bid);
+    return b?`<span class="bdg" style="background:${b.bg};color:${b.tx};">${b.icon} ${b.label}</span>`:'';
+  }).join('');
+  const svBdg=Object.entries(s.seasonBadges||{}).filter(([,count])=>count>0).map(([id,count])=>{
+    const b=BADGES.find(x=>x.id===id);
+    return b?`<span class="bdg" style="background:${b.bg};color:${b.tx};">${b.icon}${count>1?' ×'+count:''}</span>`:'';
+  }).join('');
+  const bdg=regularBdg+svBdg;
   const fn=forAward?`tSel('${s.id}')`:`openM('${s.id}')`;
   // Show rank border on card top border
   const cardAccent=s.lv>=15?'border-top:3px solid var(--GO);'
@@ -1008,12 +1017,17 @@ function renderLB(){
   const allBadges=[...BADGES,...(customBadges||[])];
   document.getElementById('lb').innerHTML=sorted.map((s,i)=>{
     const rk=getRank(s.lv);
-    // Show badges earned — with tooltip on hover
-    const badgeHtml=s.badges.slice(-4).map(bid=>{
-      const b=allBadges.find(x=>x.id===bid);
-      if(!b)return'';
+    // Regular badges with tooltip
+    const regularBadges=s.badges.slice(-3).map(bid=>{
+      const b=allBadges.find(x=>x.id===bid);if(!b)return'';
       return`<span class="badge-tip" style="margin-left:3px;"><span style="font-size:13px;">${b.icon}</span><span class="tip">${b.label}: ${b.desc}</span></span>`;
     }).join('');
+    // Season badges with count
+    const seasonBadges=Object.entries(s.seasonBadges||{}).filter(([,c])=>c>0).map(([id,count])=>{
+      const b=BADGES.find(x=>x.id===id);if(!b)return'';
+      return`<span class="badge-tip" style="margin-left:3px;"><span style="font-size:13px;">${b.icon}${count>1?'<sup style="font-size:9px;">×'+count+'</sup>':''}</span><span class="tip">${b.label}${count>1?' ×'+count:''}</span></span>`;
+    }).join('');
+    const badgeHtml=regularBadges+seasonBadges;
     return`<div class="lbr${i<3?' '+rc[i]:''}" onclick="openM('${s.id}')">
       <div class="lbp">${i<3?medals[i]:i+1}</div>${avHTML(s,28)}
       <div class="lbn">${s.name}${badgeHtml} <span style="font-size:11px;color:var(--GM);">${s.cls||''}</span></div>
