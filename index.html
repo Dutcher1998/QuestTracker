@@ -2088,19 +2088,26 @@ function deleteGP(){
 
 
 function syncAssignments(){
+  // Always request a fresh token to avoid "no active courses" from stale tokens
+  const scope='https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.rosters.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly https://www.googleapis.com/auth/classroom.student-submissions.students.readonly';
+  if(!tclient){
+    tclient=google.accounts.oauth2.initTokenClient({
+      client_id:GCL_ID,scope,
+      callback:(resp)=>{
+        if(resp.error){showEB('Auth failed: '+resp.error);return;}
+        gcToken=resp.access_token;
+        runSync();
+      }
+    });
+  }
   if(!gcToken){
-    if(!tclient){
-      tclient=google.accounts.oauth2.initTokenClient({
-        client_id:GCL_ID,
-        scope:'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.rosters.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly https://www.googleapis.com/auth/classroom.student-submissions.students.readonly',
-        callback:(resp)=>{
-          if(resp.error){showEB('Auth failed: '+resp.error);return;}
-          gcToken=resp.access_token;syncAssignments();
-        }
-      });
-    }
     tclient.requestAccessToken();return;
   }
+  // Try with existing token first, fall back to refresh on 401
+  runSync();
+}
+
+function runSync(){
   if(!xpCategories.length){showEB('No XP categories configured. Add at least one in the Assignments tab.');return;}
 
   // Get grading period / date filter
@@ -2145,8 +2152,21 @@ function syncAssignments(){
   const flagged=[];
 
   fetch('https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=50',{headers:{Authorization:'Bearer '+gcToken}})
+  .then(r=>{
+    if(r.status===401){
+      // Stale token — clear and re-request silently
+      gcToken=null;
+      addAssignLog('Session expired — re-authorizing. Please wait...','info');
+      if(tclient)tclient.requestAccessToken();
+      return Promise.reject('token_expired');
+    }
+    return r.json();
+  })
   .then(data=>{
-    if(!data.courses||!data.courses.length){setAssignStatus('No active courses found.','var(--GM)');return Promise.reject('no courses');}
+    if(!data||!data.courses||!data.courses.length){
+      setAssignStatus('No active courses found. Try clicking Sync All Classes on the Roster tab first, then retry.','var(--GM)');
+      return Promise.reject('no courses');
+    }
 
     // Build a set of course IDs that actually have students in the roster
     // This is the most reliable way — match by student Google IDs
@@ -2355,10 +2375,11 @@ function syncAssignments(){
     showEB(`✅ ${totalAwarded} auto-award${totalAwarded!==1?'s':''} — ${totalXP} XP.${flagged.length?' ⚠️ '+flagged.length+' flagged.':''}`);
   })
   .catch(e=>{
-    if(e==='no courses')return;
-    setAssignStatus('Sync error: '+e.message,'#8B1A1A');
-    addAssignLog('Error: '+e.message,'error');
-    showEB('Assignment sync error: '+e.message);
+    if(e==='no courses'||e==='token_expired')return;
+    // If it's a network/auth error, suggest re-syncing
+    setAssignStatus('Sync error — try clicking "Sync All Classes" on the Roster tab first to refresh your session.','#8B1A1A');
+    addAssignLog('Error: '+(e.message||e),'error');
+    showEB('Sync error: '+(e.message||e));
   });
 }
 </script>
