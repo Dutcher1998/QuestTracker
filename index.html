@@ -307,8 +307,8 @@ html,body{scroll-behavior:auto;}
 .flagged-item{font-size:12px;padding:8px 12px;background:#FEF9EC;border:1px solid rgba(201,146,58,.3);border-radius:var(--R);border-left:3px solid var(--GO);}
 .flagged-item strong{color:var(--MD);}
 .badge-tip{position:relative;display:inline-flex;align-items:center;cursor:default;}
-#global-tip{position:fixed;background:var(--MD);color:var(--W);font-size:12px;padding:5px 10px;border-radius:6px;white-space:nowrap;z-index:9999;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.4);font-family:'Crimson Pro',serif;display:none;}
-#global-tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:4px solid transparent;border-top-color:var(--MD);}
+#global-tip{position:fixed;background:#3D0A14;color:#F5F0E8;font-size:12px;padding:6px 11px;border-radius:6px;white-space:nowrap;z-index:9999;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,0.5);font-family:'Crimson Pro',Georgia,serif;display:none;max-width:300px;}
+#global-tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#3D0A14;}
 </style>
 </head>
 <body>
@@ -539,6 +539,8 @@ html,body{scroll-behavior:auto;}
       <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;">
         <button class="btn bo bsm" onclick="exportCSV()">Export Roster CSV</button>
         <button class="btn bo bsm" onclick="exportReport()">Export XP Report</button>
+        <button class="btn bg bsm" onclick="generateCertificates()">🎓 Generate Certificates</button>
+        <button class="btn bo bsm" onclick="exportPrivileges()">📋 Export Privileges</button>
       </div>
       <div class="ll" id="ll"></div>
     </div>
@@ -1361,19 +1363,30 @@ function openM(id){
     ${hist.length>20?`<button class="btn bg bsm" style="margin-bottom:1rem;" onclick="openFullHistory('${s.id}')">View all ${hist.length} entries</button>`:''}
     <div class="dst2">Badges</div>
     <div class="bgd">
-      ${[...BADGES,...(customBadges||[])].filter(b=>!b.id.startsWith('sv_')).map(b=>{const e=s.badges.includes(b.id);return`<span class="bch${e?'':' bl'}" style="background:${b.bg};color:${b.tx};" title="${b.desc}">${b.icon} ${b.label}</span>`;}).join('')}
+      ${[...BADGES,...(customBadges||[])].filter(b=>!b.id.startsWith('sv_')).map(b=>{
+        const e=s.badges.includes(b.id);
+        return`<span class="bch${e?'':' bl'}" data-tip="${b.desc}" style="background:${b.bg};color:${b.tx};">${b.icon} ${b.label}</span>`;
+      }).join('')}
     </div>
     <div class="dst2">Season history</div>
-    <div class="bgd" style="margin-bottom:1rem;">
+    <div style="margin-bottom:1rem;">
       ${(()=>{
         const sb=s.seasonBadges||{};
+        const sh=s.seasonHistory||[];
         const svBadges=BADGES.filter(b=>b.id.startsWith('sv_'));
         const earned=svBadges.filter(b=>sb[b.id]>0);
-        if(!earned.length)return'<span style="font-size:12px;color:var(--INK3);">No season history yet.</span>';
+        if(!earned.length)return'<div style="font-size:12px;color:var(--INK3);padding:4px 0;">No season history yet.</div>';
         return earned.map(b=>{
           const count=sb[b.id]||0;
           const reward=seasonRewards[b.id]||'';
-          return`<span class="bch" style="background:${b.bg};color:${b.tx};" title="${b.label}${reward?' — Reward: '+reward:''}">${b.icon} ${b.label}${count>1?' <strong>x'+count+'</strong>':''}</span>`;
+          const dates=sh.filter(h=>h.badge===b.id);
+          return`<div style="padding:8px 0;border-bottom:1px solid var(--BDG);">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span class="bch" data-tip="${reward?'Reward: '+reward:b.desc}" style="background:${b.bg};color:${b.tx};">${b.icon} ${b.label}${count>1?' ×'+count:''}</span>
+              ${reward?`<span style="font-size:12px;color:var(--INK3);">🎁 ${reward}</span>`:''}
+            </div>
+            ${dates.map(d=>`<div style="font-size:11px;color:var(--GM);padding-left:4px;">📅 Season ${d.season} — ${d.date}</div>`).join('')}
+          </div>`;
         }).join('');
       })()}
     </div>
@@ -1685,17 +1698,22 @@ function moderateMotto(text){
 }
 
 function saveCust(){
-  const s=students.find(x=>x.id==curSid);if(!s)return;
-  const mottoVal=document.getElementById('cust-motto').value.trim();
+  const s=students.find(x=>x.id==curSid);
+  if(!s){showEB('Could not find student profile. Please sign out and back in.');return;}
+  const mottoInput=document.getElementById('cust-motto');
+  const warnEl=document.getElementById('motto-warn');
+  if(!mottoInput)return;
+  const mottoVal=mottoInput.value.trim();
   const {ok}=moderateMotto(mottoVal);
   if(!ok){
-    const warn=document.getElementById('motto-warn');
-    if(warn){warn.style.display='block';warn.textContent='⚠️ Your motto contains inappropriate language. Please choose different words.';}
+    if(warnEl){warnEl.style.display='block';warnEl.textContent='⚠️ Your motto contains inappropriate language. Please choose different words.';}
+    else{showEB('⚠️ Motto contains inappropriate language.');}
     return;
   }
   s.motto=mottoVal;
   s.avatarIcon=window._custIconSel||s.avatarIcon||'⚔️';
   save();closeCust();renderSV();
+  showEB('Profile saved!');
 }
 function closeCust(){const mo=document.getElementById('CUST-MO');if(mo)mo.style.display='none';}
 
@@ -2073,19 +2091,24 @@ document.addEventListener('DOMContentLoaded',function(){
   // Global tooltip for badge-tip elements
   const tip=document.getElementById('global-tip');
   document.addEventListener('mouseover',e=>{
-    const el=e.target.closest('.badge-tip');
-    if(!el||!el.dataset.tip){tip.style.display='none';return;}
+    const el=e.target.closest('[data-tip]');
+    if(!el){tip.style.display='none';return;}
     tip.textContent=el.dataset.tip;
     tip.style.display='block';
+    // getBoundingClientRect gives viewport coords — use directly with position:fixed
     const r=el.getBoundingClientRect();
     const tw=tip.offsetWidth;
+    const th=tip.offsetHeight;
     let left=r.left+r.width/2-tw/2;
+    let top=r.top-th-10;
+    // Keep within viewport
     left=Math.max(8,Math.min(left,window.innerWidth-tw-8));
+    if(top<8)top=r.bottom+8; // flip below if too close to top
     tip.style.left=left+'px';
-    tip.style.top=(r.top-tip.offsetHeight-8+window.scrollY)+'px';
+    tip.style.top=top+'px';
   });
   document.addEventListener('mouseout',e=>{
-    if(!e.target.closest('.badge-tip'))tip.style.display='none';
+    if(!e.target.closest('[data-tip]'))tip.style.display='none';
   });
   document.addEventListener('scroll',()=>{tip.style.display='none';},{passive:true});
   // Refresh session timestamp on user activity
@@ -2250,30 +2273,56 @@ function generateCertificates(){
 }
 
 function exportPrivileges(){
-  // Export which students have earned which privileges
   const sp=[...privs].sort((a,b)=>a.level-b.level);
-  const rows=[['Student','Class','Level','XP',...sp.map(p=>'Lv '+p.level+': '+p.text)]];
-  [...students].sort((a,b)=>a.name.localeCompare(b.name)).forEach(s=>{
-    rows.push([
-      s.name,s.cls,s.lv,s.xp,
-      ...sp.map(p=>s.lv>=p.level?'✓ Earned':'')
-    ]);
-  });
-  // Also add a summary sheet — one row per earned privilege
+  const date=new Date().toLocaleDateString();
+  const rows=[];
+
+  // Header info
+  rows.push([`DeRuyter Quest Tracker — Privilege Report — ${date}`]);
   rows.push([]);
-  rows.push(['--- EARNED PRIVILEGES SUMMARY ---']);
-  rows.push(['Student','Class','Level','Privilege','Reward Level']);
+
+  // Section 1: All earned privileges per student
+  rows.push(['=== EARNED PRIVILEGES BY STUDENT ===']);
+  rows.push(['Student','Class','Current Level','Privilege Earned','Required Level','Reward','Collected?']);
   [...students].sort((a,b)=>b.lv-a.lv).forEach(s=>{
-    sp.filter(p=>s.lv>=p.level).forEach(p=>{
-      rows.push([s.name,s.cls,s.lv,p.text,'Lv '+p.level]);
-    });
+    const earned=sp.filter(p=>s.lv>=p.level);
+    if(earned.length){
+      earned.forEach((p,i)=>{
+        rows.push([
+          i===0?s.name:'',         // Only show name on first row
+          i===0?s.cls:'',
+          i===0?s.lv:'',
+          p.text,
+          'Lv '+p.level,
+          seasonRewards['sv_'+(['','recruit','soldier','captain','general'][Math.floor(s.lv/5)]||'recruit')]||'',
+          ''  // Blank for teacher to check off
+        ]);
+      });
+      rows.push(['','','','','','','']); // Spacer between students
+    }
   });
-  const csv=rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+
+  rows.push([]);
+  rows.push(['=== STUDENTS WITH NO EARNED PRIVILEGES ===']);
+  rows.push(['Student','Class','Level','Needs']);
+  students.filter(s=>!sp.some(p=>s.lv>=p.level)).sort((a,b)=>a.name.localeCompare(b.name)).forEach(s=>{
+    const next=sp.find(p=>s.lv<p.level);
+    rows.push([s.name,s.cls,s.lv,next?`${s.lv<p.level?p.level-s.lv:0} more levels for: ${next.text}`:'None']);
+  });
+
+  rows.push([]);
+  rows.push(['=== FULL PRIVILEGE MATRIX ===']);
+  rows.push(['Student','Class','Level',...sp.map(p=>`Lv${p.level}: ${p.text}`)]);
+  [...students].sort((a,b)=>a.name.localeCompare(b.name)).forEach(s=>{
+    rows.push([s.name,s.cls,s.lv,...sp.map(p=>s.lv>=p.level?'✓':'')]);
+  });
+
+  const csv=rows.map(r=>r.map(c=>`"${String(c===undefined||c===null?'':c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
-  a.download='privileges-report.csv';
+  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download=`privileges-report-${date.replace(/\//g,'-')}.csv`;
   a.click();
-  showEB('Privileges report exported. Open in Excel or Google Sheets.');
+  showEB('Privileges report exported with full detail.');
 }
 
 function loadSavedPeriods(){
