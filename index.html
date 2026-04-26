@@ -601,7 +601,11 @@ html,body{scroll-behavior:auto;}
         </div>
       </div>
         <div class="reset-warn">⚠️ This will reset all student XP to zero and levels to 1. Students keep custom badges, the Legend badge (if earned). Each student receives a tiered season badge based on their final rank. Cannot be undone.</div>
-        <button class="btn bd" onclick="seasonReset()">Reset Season</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn bd" onclick="seasonReset()">Reset Season</button>
+          <button class="btn bg bsm" onclick="generateCertificates()">🎓 Generate Certificates</button>
+          <button class="btn bo bsm" onclick="exportPrivileges()">📋 Export Privileges</button>
+        </div>
       </div>
       <div class="aws">
         <h3>Season end rewards — configure per rank</h3>
@@ -1309,9 +1313,11 @@ function seasonReset(){
     // Strip automatic XP/rank badges, keep Legend and custom
     s.badges=s.badges.filter(id=>!autoIds.includes(id)&&!svIds.includes(id));
 
-    // Increment seasonBadges count
+    // Increment seasonBadges count with date history
     if(!s.seasonBadges)s.seasonBadges={};
+    if(!s.seasonHistory)s.seasonHistory=[];
     s.seasonBadges[seasonBadge]=(s.seasonBadges[seasonBadge]||0)+1;
+    s.seasonHistory.push({badge:seasonBadge,date:new Date().toLocaleDateString(),season:seasonNum});
 
     // Reset XP and level
     s.xp=0;s.lv=1;s.te=0;
@@ -1550,8 +1556,8 @@ function renderSV(){
     ${activeQ.length?`<div class="ss"><h2>📋 Active Quests</h2>${activeQ.map(q=>`<div class="sq-item"><div class="sq-icon">${q.icon}</div><div><div class="sq-title">${q.title}</div><div class="sq-desc">${q.desc||''}${q.deadline?' · Due: '+new Date(q.deadline).toLocaleDateString():''}</div></div><div class="sq-xp">+${q.xp} XP</div></div>`).join('')}</div>`:''}
     <div class="ss"><h2>🏅 Badges</h2>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${eb.map(b=>`<span class="bch" style="background:${b.bg};color:${b.tx};" title="${b.desc}">${b.icon} ${b.label}</span>`).join('')}
-        ${lb2.map(b=>`<span class="bch bl" style="background:${b.bg};color:${b.tx};" title="Locked: ${b.desc}">${b.icon} ${b.label}</span>`).join('')}
+        ${eb.map(b=>`<span class="badge-tip bch" data-tip="${b.desc}" style="background:${b.bg};color:${b.tx};">${b.icon} ${b.label}</span>`).join('')}
+        ${lb2.map(b=>`<span class="badge-tip bch bl" data-tip="Locked: ${b.desc}" style="background:${b.bg};color:${b.tx};">${b.icon} ${b.label}</span>`).join('')}
         ${eb.length===0?'<span style="font-size:13px;color:var(--INK3);">No badges yet — keep earning XP!</span>':''}
       </div>
     </div>
@@ -1559,9 +1565,15 @@ function renderSV(){
       ${svBadgeList.filter(b=>sb[b.id]>0).map(b=>{
         const count=sb[b.id];
         const reward=seasonRewards[b.id]||'';
-        return`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--BDG);">
-          <span class="bch" style="background:${b.bg};color:${b.tx};">${b.icon} ${b.label}${count>1?' <strong>×'+count+'</strong>':''}</span>
-          ${reward?`<span style="font-size:13px;color:var(--INK3);">🎁 ${reward}</span>`:''}
+        // Get dates from seasonHistory
+        const hist=(s.seasonHistory||[]).filter(h=>h.badge===b.id);
+        const dateStr=hist.map(h=>`Season ${h.season} (${h.date})`).join(', ');
+        return`<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--BDG);">
+          <span class="badge-tip bch" data-tip="${b.label}${reward?' — Reward: '+reward:''}" style="background:${b.bg};color:${b.tx};flex-shrink:0;">${b.icon} ${b.label}${count>1?' <strong>×'+count+'</strong>':''}</span>
+          <div>
+            ${reward?`<div style="font-size:13px;color:var(--INK3);">🎁 ${reward}</div>`:''}
+            ${dateStr?`<div style="font-size:11px;color:var(--GM);margin-top:2px;">📅 ${dateStr}</div>`:''}
+          </div>
         </div>`;
       }).join('')}
     </div>`:''}
@@ -1618,7 +1630,8 @@ function openCustomize(){
       <div class="mb">
         <div style="margin-bottom:1rem;">
           <div class="sl">Your motto</div>
-          <input class="fi" id="cust-motto" type="text" maxlength="60" placeholder="A short personal motto..." style="width:100%;"/>
+          <input class="fi" id="cust-motto" type="text" maxlength="60" placeholder="A short personal motto..." style="width:100%;" oninput="document.getElementById('motto-warn').style.display='none'"/>
+          <div id="motto-warn" style="display:none;font-size:12px;color:#8B1A1A;margin-top:4px;padding:6px 8px;background:#FEF0F0;border-radius:var(--R);"></div>
           <div style="font-size:11px;color:var(--INK3);margin-top:4px;">Max 60 characters. Displayed under your name.</div>
         </div>
         <div style="margin-bottom:1rem;">
@@ -1658,9 +1671,29 @@ function selectIcon(ic){
   const el=document.getElementById(id);
   if(el){el.style.borderColor='var(--M)';el.style.background='var(--MP)';}
 }
+// Profanity filter — basic word list, extensible
+const BAD_WORDS=['fuck','shit','ass','bitch','cunt','dick','pussy','bastard','damn','hell','crap','piss','cock','whore','slut','nigger','faggot','retard'];
+function moderateMotto(text){
+  if(!text)return{ok:true,clean:''};
+  let clean=text.trim();
+  const lower=clean.toLowerCase();
+  for(const w of BAD_WORDS){
+    const re=new RegExp(w,'gi');
+    if(re.test(lower)){return{ok:false,clean};}
+  }
+  return{ok:true,clean};
+}
+
 function saveCust(){
   const s=students.find(x=>x.id==curSid);if(!s)return;
-  s.motto=document.getElementById('cust-motto').value.trim();
+  const mottoVal=document.getElementById('cust-motto').value.trim();
+  const {ok}=moderateMotto(mottoVal);
+  if(!ok){
+    const warn=document.getElementById('motto-warn');
+    if(warn){warn.style.display='block';warn.textContent='⚠️ Your motto contains inappropriate language. Please choose different words.';}
+    return;
+  }
+  s.motto=mottoVal;
   s.avatarIcon=window._custIconSel||s.avatarIcon||'⚔️';
   save();closeCust();renderSV();
 }
@@ -2156,6 +2189,91 @@ function manualFetchGP(){
   }
   showEB('Fetching grading periods from Google Classroom...');
   tryFetchGradingPeriods();
+}
+
+function generateCertificates(){
+  const win=window.open('','_blank');
+  const rk=s=>getRank(s.lv);
+  const date=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const certHTML=students.map(s=>{
+    const r=getRank(s.lv);
+    const sb=s.seasonBadges||{};
+    const svb=BADGES.filter(b=>b.id.startsWith('sv_')&&sb[b.id]>0).map(b=>b.label).join(', ');
+    const reward=Object.keys(sb).filter(k=>sb[k]>0).map(k=>seasonRewards[k]||'').filter(Boolean)[0]||'';
+    return`<div class="cert">
+      <div class="cert-border">
+        <div class="cert-logo">🚀</div>
+        <div class="cert-school">DeRuyter Central School</div>
+        <div class="cert-title">Certificate of Achievement</div>
+        <div class="cert-sub">Quest Tracker — Season Recognition</div>
+        <div class="cert-name">${s.name}</div>
+        <div class="cert-body">has demonstrated dedication and achievement, reaching</div>
+        <div class="cert-rank">${r.icon} ${r.name} — Level ${s.lv}</div>
+        ${svb?`<div class="cert-badge">Season Award: ${svb}</div>`:''}
+        ${reward?`<div class="cert-reward">🎁 Reward: ${reward}</div>`:''}
+        <div class="cert-stats">Total XP Earned: ${s.te.toLocaleString()} · Badges: ${s.badges.length+(Object.keys(sb).filter(k=>sb[k]>0).length)}</div>
+        <div class="cert-footer">
+          <div class="cert-sig"><div class="cert-sig-line"></div><div>Mr. Dutcher</div><div style="font-size:11px;">Social Studies</div></div>
+          <div class="cert-date">${date}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  win.document.write(`<!DOCTYPE html><html><head><title>Season Certificates</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Crimson+Pro:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Crimson Pro',Georgia,serif;background:#f0f0f0;padding:20px;}
+    .cert{width:100%;max-width:750px;margin:0 auto 40px;background:white;page-break-after:always;}
+    .cert-border{border:8px solid #6B1A2A;padding:40px;min-height:500px;display:flex;flex-direction:column;align-items:center;text-align:center;position:relative;}
+    .cert-border::before{content:'';position:absolute;inset:12px;border:2px solid #C9923A;pointer-events:none;}
+    .cert-logo{font-size:48px;margin-bottom:8px;}
+    .cert-school{font-family:'Cinzel',serif;font-size:13px;color:#6B1A2A;letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;}
+    .cert-title{font-family:'Cinzel',serif;font-size:28px;color:#3D0A14;margin-bottom:4px;}
+    .cert-sub{font-size:14px;color:#A0A0A0;margin-bottom:32px;letter-spacing:1px;}
+    .cert-name{font-family:'Cinzel',serif;font-size:36px;color:#6B1A2A;border-bottom:2px solid #C9923A;padding-bottom:8px;margin-bottom:16px;min-width:400px;}
+    .cert-body{font-size:16px;color:#444;margin-bottom:12px;}
+    .cert-rank{font-family:'Cinzel',serif;font-size:22px;color:#3D0A14;margin:8px 0;}
+    .cert-badge{font-size:15px;color:#5A3A6B;margin:8px 0;}
+    .cert-reward{font-size:15px;color:#6B1A2A;margin:8px 0;}
+    .cert-stats{font-size:12px;color:#A0A0A0;margin:16px 0;}
+    .cert-footer{display:flex;justify-content:space-between;align-items:flex-end;width:100%;margin-top:auto;padding-top:32px;}
+    .cert-sig{text-align:center;font-size:13px;color:#444;}
+    .cert-sig-line{border-top:1px solid #444;width:200px;margin-bottom:6px;}
+    .cert-date{font-size:13px;color:#A0A0A0;font-style:italic;}
+    @media print{body{background:white;padding:0;}.cert{margin:0;max-width:100%;}.cert-border{min-height:95vh;}}
+  </style></head><body>${certHTML}
+  <div style="text-align:center;margin:20px 0;"><button onclick="window.print()" style="font-size:16px;padding:10px 24px;background:#6B1A2A;color:white;border:none;border-radius:6px;cursor:pointer;">🖨️ Print All Certificates</button></div>
+  </body></html>`);
+  win.document.close();
+}
+
+function exportPrivileges(){
+  // Export which students have earned which privileges
+  const sp=[...privs].sort((a,b)=>a.level-b.level);
+  const rows=[['Student','Class','Level','XP',...sp.map(p=>'Lv '+p.level+': '+p.text)]];
+  [...students].sort((a,b)=>a.name.localeCompare(b.name)).forEach(s=>{
+    rows.push([
+      s.name,s.cls,s.lv,s.xp,
+      ...sp.map(p=>s.lv>=p.level?'✓ Earned':'')
+    ]);
+  });
+  // Also add a summary sheet — one row per earned privilege
+  rows.push([]);
+  rows.push(['--- EARNED PRIVILEGES SUMMARY ---']);
+  rows.push(['Student','Class','Level','Privilege','Reward Level']);
+  [...students].sort((a,b)=>b.lv-a.lv).forEach(s=>{
+    sp.filter(p=>s.lv>=p.level).forEach(p=>{
+      rows.push([s.name,s.cls,s.lv,p.text,'Lv '+p.level]);
+    });
+  });
+  const csv=rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='privileges-report.csv';
+  a.click();
+  showEB('Privileges report exported. Open in Excel or Google Sheets.');
 }
 
 function loadSavedPeriods(){
