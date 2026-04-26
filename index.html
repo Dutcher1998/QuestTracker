@@ -598,7 +598,7 @@ html,body{scroll-behavior:auto;}
           </div>
         </div>
       </div>
-        <div class="reset-warn">⚠️ This will reset all student XP to zero and levels to 1. Students keep their badges and will receive a permanent "Season Veteran" legacy badge. This cannot be undone.</div>
+        <div class="reset-warn">⚠️ This will reset all student XP to zero and levels to 1. Students keep custom badges and the Legend badge (if earned). Each student receives a tiered season badge — 🏛️ Season Recruit, 🏅 Season Soldier, 🎗️ Season Captain, or 👑 Season General — based on their rank at reset. Cannot be undone.</div>
         <button class="btn bd" onclick="seasonReset()">Reset Season</button>
       </div>
     </div>
@@ -711,7 +711,10 @@ const BADGES=[
   {id:'cp',label:'Captain',desc:'Reached Captain',icon:'🎖️',chk:s=>s.lv>=10,bg:'#F8EDEF',tx:'#6B1A2A'},
   {id:'gn',label:'General',desc:'Reached General',icon:'👑',chk:s=>s.lv>=15,bg:'#F0E0E4',tx:'#3D0A14'},
   {id:'lg',label:'Legend',desc:'Level 20',icon:'⭐',chk:s=>s.lv>=20,bg:'#3D0A14',tx:'#E8C97A'},
-  {id:'sv',label:'Season Vet',desc:'Completed a season',icon:'🏛️',chk:s=>false,bg:'#FDF6E8',tx:'#7A5500'}
+  {id:'sv_recruit',label:'Season Recruit',desc:'Completed a season at Recruit rank',icon:'🏛️',chk:s=>false,bg:'#EAEAEA',tx:'#3A3A3A'},
+  {id:'sv_soldier',label:'Season Soldier',desc:'Completed a season at Soldier rank',icon:'🏅',chk:s=>false,bg:'#F0EAF5',tx:'#5A3A6B'},
+  {id:'sv_captain',label:'Season Captain',desc:'Completed a season at Captain rank',icon:'🎗️',chk:s=>false,bg:'#F8EDEF',tx:'#6B1A2A'},
+  {id:'sv_general',label:'Season General',desc:'Completed a season at General rank',icon:'👑',chk:s=>false,bg:'#F0E0E4',tx:'#3D0A14'}
 ];
 const AVC=[
   {bg:'#F8EDEF',tx:'#6B1A2A'},{bg:'#EAEAEA',tx:'#3A3A3A'},
@@ -1251,16 +1254,30 @@ function refetchPhotos(){
 
 /* SEASON RESET */
 function seasonReset(){
-  if(!confirm('Reset the season? All XP and levels will be cleared. Students will keep custom badges and receive a Season Veteran badge. All rank/XP badges reset. This CANNOT be undone.'))return;
+  if(!confirm('Reset the season? All XP and levels will be cleared. Students keep custom badges, the Legend badge if earned, and receive a tiered season badge based on their final rank. This CANNOT be undone.'))return;
+  // IDs to strip: all auto badges except sv_ season badges and lg (Legend)
+  const keepIds=['lg'];// Legend persists
+  const svIds=['sv_recruit','sv_soldier','sv_captain','sv_general'];
+  const autoIds=BADGES.map(b=>b.id).filter(id=>!keepIds.includes(id)&&!svIds.includes(id));
+
   students.forEach(s=>{
-    s.xp=0;s.lv=1;s.te=0;
-    // Keep only custom badges and season veteran; strip all automatic badges
-    const autoIds=BADGES.map(b=>b.id).filter(id=>id!=='sv');
+    // Determine tiered badge based on CURRENT level before reset
+    let seasonBadge='sv_recruit';
+    if(s.lv>=15)seasonBadge='sv_general';
+    else if(s.lv>=10)seasonBadge='sv_captain';
+    else if(s.lv>=5)seasonBadge='sv_soldier';
+
+    // Strip automatic XP/rank badges, keep Legend, custom, and existing season badges
     s.badges=s.badges.filter(id=>!autoIds.includes(id));
-    if(!s.badges.includes('sv'))s.badges.push('sv');
+
+    // Award this season's tiered badge
+    if(!s.badges.includes(seasonBadge))s.badges.push(seasonBadge);
+
+    // Reset XP and level
+    s.xp=0;s.lv=1;s.te=0;
   });
-  addLog('Season reset. All XP cleared. Season Veteran badges awarded.','event');
-  save();render();showEB('Season reset complete. All rank badges cleared. Season Veteran badge awarded to all students.');
+  addLog('Season reset. Tiered season badges awarded based on final ranks.','event');
+  save();render();showEB('Season reset complete. Students received tiered season badges matching their final rank. Legend badges preserved.');
 }
 
 /* MODAL */
@@ -1441,7 +1458,7 @@ function renderSV(){
   const sp=[...privs].sort((a,b)=>a.level-b.level);
   const allBadges=[...BADGES,...(customBadges||[])];
   const eb=allBadges.filter(b=>s.badges.includes(b.id));
-  const lb2=allBadges.filter(b=>!s.badges.includes(b.id)&&b.id!=='sv');
+  const lb2=allBadges.filter(b=>!s.badges.includes(b.id)&&!b.id.startsWith('sv_'));
   const avatarIcon=s.avatarIcon||'⚔️';
   const motto=s.motto||'';
 
