@@ -343,6 +343,7 @@ html,body{scroll-behavior:auto;}
     <p>Sign in with your school Google account. Teachers see the full dashboard. Students see their progress and the class leaderboard.</p>
     <div class="sn">Sign in below. The app recognizes teachers vs. students automatically.</div>
     <div class="br"><button class="btn bm" onclick="signIn()">Sign in with Google</button><button class="btn bo" onclick="demoMode()">Demo mode</button></div>
+    <div id="g-btn-container" style="display:none;margin-top:8px;"></div>
   </div>
 </div>
 
@@ -1720,7 +1721,39 @@ function touchSession(){
 
 function signIn(){if(typeof google==='undefined'){loadGS(()=>initGA(true));}else{initGA(true);}}
 function loadGS(cb){const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=cb;document.head.appendChild(s);}
-function initGA(auto){google.accounts.id.initialize({client_id:GCL_ID,callback:handleCred,auto_select:false});if(auto)google.accounts.id.prompt();}
+function initGA(auto){
+  google.accounts.id.initialize({
+    client_id:GCL_ID,
+    callback:handleCred,
+    auto_select:false,
+    cancel_on_tap_outside:false
+  });
+  if(auto){
+    google.accounts.id.prompt((notification)=>{
+      // If One Tap is not displayed (no Google account in browser), fall back to rendered button
+      if(notification.isNotDisplayed()||notification.isSkippedMoment()){
+        renderGoogleBtn();
+      }
+    });
+  }
+}
+
+function renderGoogleBtn(){
+  // Render an explicit Google Sign-In button inside the setup card
+  const container=document.getElementById('g-btn-container');
+  if(!container)return;
+  container.innerHTML='';
+  google.accounts.id.renderButton(container,{
+    theme:'outline',
+    size:'large',
+    text:'signin_with',
+    shape:'rectangular',
+    width:240
+  });
+  container.style.display='flex';
+  container.style.justifyContent='center';
+  container.style.marginTop='12px';
+}
 function handleCred(resp){
   const pl=parseJWT(resp.credential);
   curUser={name:pl.name,email:pl.email,picture:pl.picture,googleId:pl.sub};
