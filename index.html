@@ -839,9 +839,14 @@ html,body{scroll-behavior:auto;}
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
           <div>
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Teacher accounts</div>
-            <div style="font-size:13px;color:var(--INK3);margin-bottom:6px;">Emails listed here get teacher access. <strong>Important:</strong> this list is saved in your browser only. To give permanent access to colleagues on all devices, add their email directly to the HTML file (search for <code style="font-size:12px;background:var(--GP);padding:1px 4px;border-radius:3px;">TEMAILS_HARDCODED</code>) and redeploy to GitHub.</div>
-            <textarea class="fi" id="teacher-emails-input" style="width:100%;height:90px;resize:vertical;font-size:13px;" placeholder="dutcher@deruytercentral.org&#10;colleague@deruytercentral.org"></textarea>
-            <button class="btn bm bsm" style="margin-top:6px;" onclick="saveTeacherEmails()">Save Teacher Emails</button>
+            <div style="background:var(--GOP);border:1px solid rgba(201,146,58,.3);border-radius:var(--R);padding:10px 12px;font-size:13px;color:#7A5500;margin-bottom:10px;">
+              ✓ Anyone with a <strong>@deruytercentral.org</strong> email automatically gets teacher access.<br/>
+              ✓ Anyone with a <strong>@deruyterrockets.org</strong> email automatically gets student access.<br/>
+              No configuration needed — domain-based access works for everyone on any device.
+            </div>
+            <div style="font-size:13px;color:var(--INK3);margin-bottom:6px;">Add individual emails here if you need to grant access to someone outside these domains (e.g. a substitute or administrator):</div>
+            <textarea class="fi" id="teacher-emails-input" style="width:100%;height:70px;resize:vertical;font-size:13px;" placeholder="substitute@gmail.com&#10;admin@example.com"></textarea>
+            <button class="btn bm bsm" style="margin-top:6px;" onclick="saveTeacherEmails()">Save Extra Emails</button>
           </div>
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
           <div>
@@ -969,25 +974,34 @@ html,body{scroll-behavior:auto;}
 
 <script>
 const GCL_ID='249246305432-o4ukh4lim7k2lfq6hlr3rked9ma5vhe2.apps.googleusercontent.com';
-// TEACHER EMAILS — add colleague emails directly here so they work for everyone
-// The Settings UI can add more without touching this file
-const TEMAILS_HARDCODED=[
-  'dutcher@deruytercentral.org',
-  'moorhead@deruytercentral.org',
-  'kempf@deruytercentral.org',
-  // Add colleague emails here, e.g.:
-  // 'colleague@deruytercentral.org',
-];
+// DOMAIN-BASED ACCESS CONTROL
+// Anyone with a @deruytercentral.org email gets teacher access
+// Anyone with a @deruyterrockets.org email gets student access
+const TEACHER_DOMAINS=['deruytercentral.org'];
+const STUDENT_DOMAINS=['deruyterrockets.org'];
+
 function getTeacherEmails(){
-  // Merge hardcoded list with any added via Settings UI
+  // Still support manually added emails via Settings as a fallback
   try{
     const stored=localStorage.getItem('dq_temails');
-    if(stored){
-      const extra=JSON.parse(stored);
-      return [...new Set([...TEMAILS_HARDCODED,...extra])];
-    }
+    if(stored)return JSON.parse(stored);
   }catch(e){}
-  return TEMAILS_HARDCODED;
+  return[];
+}
+
+function isTeacherEmail(email){
+  if(!email)return false;
+  const e=email.toLowerCase().trim();
+  const domain=e.split('@')[1]||'';
+  if(TEACHER_DOMAINS.includes(domain))return true;
+  if(getTeacherEmails().includes(e))return true;
+  return false;
+}
+
+function isStudentEmail(email){
+  if(!email)return false;
+  const domain=(email.toLowerCase().split('@')[1])||'';
+  return STUDENT_DOMAINS.includes(domain);
 }
 
 const LVS=(()=>{const t=[0];for(let i=1;i<=20;i++)t.push(t[i-1]+Math.round(50*Math.pow(i,1.8)));return t;})();
@@ -1931,7 +1945,7 @@ function renderSV(){
   if(!s){
     // Check if this user is actually a teacher who should have teacher view
     const email=(curUser?.email||'').toLowerCase();
-    const knownTeacher=getTeacherEmails().includes(email);
+    const knownTeacher=isTeacherEmail(email);
     if(knownTeacher){
       // This teacher is not in TEMAILS yet but signed in — show notice
       sv.innerHTML=`<div style="max-width:640px;margin:0 auto;padding:2rem 20px;"><div class="nfm">
@@ -1946,7 +1960,7 @@ function renderSV(){
       <div style="font-size:40px;margin-bottom:12px;">🚀</div>
       <h2>Not found in roster</h2>
       <p style="font-size:14px;color:var(--INK3);margin-top:8px;">Your account (<strong>${curUser?curUser.email:''}</strong>) is not linked to a student yet.</p>
-      <p style="font-size:14px;color:var(--INK3);margin-top:8px;">Ask your teacher to sync Google Classroom — your account will be matched automatically once synced.</p>
+      <p style="font-size:14px;color:var(--INK3);margin-top:8px;">Make sure you are signed in with your <strong>@deruyterrockets.org</strong> school account. Ask your teacher to sync Google Classroom — your account will be matched automatically.</p>
     </div></div>`;
     return;
   }
@@ -2191,8 +2205,7 @@ function loadSession(){
     if(!s.user||!s.ts)return false;
     if(Date.now()-s.ts>SESSION_EXPIRY){sessionStorage.removeItem(SESSION_KEY);return false;}
     curUser=s.user;
-    // Always re-evaluate teacher status from current email list, never trust stored isT
-    isT=getTeacherEmails().includes((curUser?.email||'').toLowerCase());
+    isT=isTeacherEmail(curUser?.email);
     return true;
   }catch(e){return false;}
 }
@@ -2240,7 +2253,7 @@ function renderGoogleBtn(){
 function handleCred(resp){
   const pl=parseJWT(resp.credential);
   curUser={name:pl.name,email:pl.email,picture:pl.picture,googleId:pl.sub};
-  isT=getTeacherEmails().includes((pl.email||'').toLowerCase());
+  isT=isTeacherEmail(pl.email);
   completeSignIn();
 }
 function parseJWT(t){try{return JSON.parse(atob(t.split('.')[1]));}catch(e){return{};}}
