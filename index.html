@@ -1653,7 +1653,9 @@ function saveTeacherEmails(){
   const emails=raw.split('\n').map(e=>e.trim().toLowerCase()).filter(Boolean);
   if(!emails.length){showEB('Enter at least one teacher email.');return;}
   localStorage.setItem('dq_temails',JSON.stringify(emails));
-  showEB('Teacher emails saved. Reload the page to apply.');
+  // Clear session so next load re-evaluates teacher status with new list
+  sessionStorage.removeItem('dq_session');
+  showEB('Teacher emails saved. Other teachers should now reload the page to get access.');
 }
 
 function fullSessionReset(){
@@ -2174,7 +2176,9 @@ function loadSession(){
     const s=JSON.parse(raw);
     if(!s.user||!s.ts)return false;
     if(Date.now()-s.ts>SESSION_EXPIRY){sessionStorage.removeItem(SESSION_KEY);return false;}
-    curUser=s.user;isT=s.isT;
+    curUser=s.user;
+    // Always re-evaluate teacher status from current email list, never trust stored isT
+    isT=getTeacherEmails().includes((curUser?.email||'').toLowerCase());
     return true;
   }catch(e){return false;}
 }
