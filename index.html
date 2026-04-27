@@ -269,7 +269,15 @@ html,body{scroll-behavior:auto;}
 .pc-card.absent{background:#F5F5F5;border-color:#CCC;opacity:.6;}
 .pc-card.absent .pc-name{color:#888;text-decoration:line-through;}
 .pc-card.absent::after{content:'🏠';position:absolute;top:6px;right:8px;font-size:16px;}
-.pc-card{background:var(--W);border:2px solid var(--BDG);border-radius:var(--RL);padding:12px;text-align:center;cursor:pointer;transition:all .2s;position:relative;user-select:none;}
+.att-card{background:var(--W);border:2px solid var(--BDG);border-radius:var(--RL);padding:12px;text-align:center;cursor:pointer;transition:all .2s;position:relative;user-select:none;}
+.att-card:hover{border-color:var(--M);}
+.att-card.absent{background:#F0F0F0;border-color:#CCC;opacity:.45;}
+.att-card.absent .att-name{color:#888;text-decoration:line-through;}
+.att-card.absent::after{content:'🏠';position:absolute;top:5px;right:8px;font-size:15px;}
+.att-card.submitted{cursor:default;}
+.att-name{font-family:'Cinzel',serif;font-size:13px;color:var(--MD);margin-bottom:4px;line-height:1.3;}
+.att-days{font-size:22px;font-family:'Cinzel',serif;color:var(--M);}
+.att-label{font-size:11px;color:var(--GM);}border:2px solid var(--BDG);border-radius:var(--RL);padding:12px;text-align:center;cursor:pointer;transition:all .2s;position:relative;user-select:none;}
 .pc-card:hover{border-color:var(--M);transform:translateY(-1px);box-shadow:0 4px 12px var(--SH);}
 .pc-card.done{background:linear-gradient(135deg,#1A6B2A,#2A8B3A);border-color:#1A6B2A;}
 .pc-card.done .pc-name{color:var(--W);text-decoration:line-through;opacity:.8;}
@@ -490,13 +498,14 @@ html,body{scroll-behavior:auto;}
     </div>
     <div class="tb">
       <button class="tab active" id="tab-roster" onclick="showTab('roster')">Roster</button>
-      <button class="tab" id="tab-award" onclick="showTab('award')">Award XP</button>
+      <button class="tab" id="tab-attendance" onclick="showTab('attendance')">📋 Attendance</button>
       <button class="tab" id="tab-leaderboard" onclick="showTab('leaderboard')">Leaderboard</button>
-      <button class="tab" id="tab-cvc" onclick="showTab('cvc')">Class vs Class</button>
+      <button class="tab" id="tab-award" onclick="showTab('award')">Award XP</button>
       <button class="tab" id="tab-quests" onclick="showTab('quests')">Quest Board</button>
       <button class="tab" id="tab-participation" onclick="showTab('participation')">🎯 Class Challenge</button>
       <button class="tab" id="tab-assignments" onclick="showTab('assignments')">📚 Assignments</button>
       <button class="tab" id="tab-log" onclick="showTab('log')">Event Log</button>
+      <button class="tab" id="tab-cvc" onclick="showTab('cvc')">Class vs Class</button>
       <button class="tab" id="tab-settings" onclick="showTab('settings')">Settings</button>
     </div>
 
@@ -654,6 +663,32 @@ html,body{scroll-behavior:auto;}
         </div>
       </div>
     </div>
+    <!-- ATTENDANCE -->
+    <div class="pnl" id="pnl-attendance">
+      <div class="aws">
+        <h3>Attendance</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:1rem;">
+          <div class="cp" id="cp-att" style="margin-bottom:0;flex:1;"></div>
+          <div style="font-size:13px;color:var(--INK3);" id="att-reset-info"></div>
+        </div>
+        <div style="background:linear-gradient(135deg,var(--MD),#5A0A1A);border-radius:var(--RL);padding:1rem 1.5rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+          <div>
+            <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--GOL);" id="att-status-text">Mark absent students, then submit.</div>
+            <div style="font-size:13px;color:rgba(255,255,255,.5);margin-top:2px;" id="att-count-text"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <div id="att-submitted-badge" style="display:none;font-family:'Cinzel',serif;font-size:13px;color:var(--GOL);padding:4px 12px;border:1px solid var(--GOL);border-radius:20px;">✓ Submitted Today</div>
+            <button class="btn bgold" id="att-submit-btn" onclick="submitAttendance()">Submit Attendance · +100 XP</button>
+          </div>
+        </div>
+        <div id="att-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;"></div>
+      </div>
+      <div class="aws" id="att-history-panel" style="display:none;">
+        <h3>Days present this marking period</h3>
+        <div id="att-history-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;"></div>
+      </div>
+    </div>
+
     <div class="pnl" id="pnl-assignments">
       <div class="aws">
         <h3>Google Classroom assignment XP sync</h3>
@@ -797,7 +832,7 @@ html,body{scroll-behavior:auto;}
           <div>
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Re-run setup wizard</div>
             <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Reopens the first-time setup wizard to reconfigure Google Classroom, marking periods, and XP categories.</div>
-            <button class="btn bg bsm" onclick="localStorage.removeItem('dq_setup_done');openSetupWizard();">↩ Open Setup Wizard</button>
+            <button class="btn bg bsm" onclick="localStorage.removeItem('dq_setup_done');window._wizardWaiting=false;openSetupWizard();">↩ Open Setup Wizard</button>
           </div>
         </div>
       </div>
@@ -987,7 +1022,7 @@ let rcls='All',acls='All',lcls='All',pvcls='All';
 let undoStack=null,undoTimer=null;
 let luQueue=[];
 
-function mkS(name,idx,cls){return{id:'s'+Date.now()+Math.random(),name,xp:0,lv:1,te:0,badges:[],ai:idx%AVC.length,gid:null,cls:cls||'General',pic:null,hist:[],seasonBadges:{}};}
+function mkS(name,idx,cls){return{id:'s'+Date.now()+Math.random(),name,xp:0,lv:1,te:0,badges:[],ai:idx%AVC.length,gid:null,cls:cls||'General',pic:null,hist:[],seasonBadges:{},attendanceDays:0};}
 function getCls(){return[...new Set(students.map(s=>s.cls).filter(Boolean))].sort();}
 function getRank(lv){return RANKS.find(r=>lv>=r.min&&lv<=r.max)||RANKS[0];}
 function lvFromXP(xp){let l=1;for(let i=1;i<=20;i++){if(xp>=LVS[i])l=i+1;else break;}return Math.min(l,20);}
@@ -1700,6 +1735,7 @@ function showTab(id){
   if(id==='settings'){renderActsTable();renderPrivEditor();renderCustomBadges();renderSeasonRewards();renderXPLevelTable();}
   if(id==='assignments'){renderCategoryTable();renderAutoAwardLog();renderAssignClassPills();}
   if(id==='participation'){renderParticipationSetup();}
+  if(id==='attendance'){renderAttendance();}
 }
 function switchView(v){
   document.getElementById('vt-t').classList.toggle('active',v==='teacher');
@@ -1918,11 +1954,13 @@ function selectIcon(ic){
 const BAD_WORDS=['fuck','shit','ass','bitch','cunt','dick','pussy','bastard','damn','hell','crap','piss','cock','whore','slut','nigger','faggot','retard','gay','penis','vagina','fag','horny','boobs','sex','rape','anal'];
 function moderateMotto(text){
   if(!text)return{ok:true,clean:''};
-  let clean=text.trim();
-  const lower=clean.toLowerCase();
+  const clean=text.trim();
+  // Strip all non-letter characters to catch "s.h.i.t", "sh it", "s h i t" etc.
+  const stripped=clean.toLowerCase().replace(/[^a-z]/g,'');
   for(const w of BAD_WORDS){
-    const re=new RegExp(w,'gi');
-    if(re.test(lower)){return{ok:false,clean};}
+    // Check both original (with spaces/punctuation removed) and original text
+    const wStripped=w.replace(/[^a-z]/g,'');
+    if(stripped.includes(wStripped)){return{ok:false,clean};}
   }
   return{ok:true,clean};
 }
@@ -2049,6 +2087,7 @@ function completeSignIn(){
   appEl.style.display='flex';appEl.style.flexDirection='column';
   load();
   loadSavedPeriods();
+  loadAttendance();
   saveSession();// Persist session for 30 minutes
   if(curUser){
     document.getElementById('UP').style.display='flex';
@@ -2193,42 +2232,40 @@ function doSync(){
       awardedSubmissions={};autoAwardLog=[];
       save();render();
       showEB(`Synced ${results.length} class${results.length!==1?'es':''} — ${added} new student${added!==1?'s':''} added.`);
-      // Show wizard completion if user came from wizard step 2
-      if(window._wizardWaiting){
+      // Show wizard completion after any sync if setup not yet marked done
+      if(!localStorage.getItem('dq_setup_done')){
         window._wizardWaiting=false;
         const alreadyConfigured=savedPeriods.length>0&&xpCategories.length>0;
         localStorage.setItem('dq_setup_done','1');
         const wiz=document.getElementById('SETUP-WIZ');
-        if(wiz){
-          if(alreadyConfigured){
-            wiz.innerHTML=`<div class="md" style="max-width:560px;">
-              <div class="mh" style="justify-content:center;flex-direction:column;gap:8px;text-align:center;padding:2rem;">
-                <div style="font-size:64px;margin-bottom:8px;">🎉</div>
-                <h2 style="font-family:'Cinzel',serif;font-size:22px;color:var(--GOL);">You're All Set!</h2>
-              </div>
-              <div class="mb" style="text-align:center;">
-                <p style="font-size:16px;line-height:1.7;color:var(--INK3);margin-bottom:1.5rem;">${added} new student${added!==1?'s':''} added across ${results.length} class${results.length!==1?'es':''}. Auto-sync will award XP every ${autoSyncIntervalMin} minutes.</p>
-                <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:1.5rem;">
-                  <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
-                    <span style="font-size:22px;">⚡</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Auto-sync is running</div><div style="font-size:13px;color:var(--INK3);">XP awards automatically in the background</div></div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
-                    <span style="font-size:22px;">📚</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Match your category names</div><div style="font-size:13px;color:var(--INK3);">Assignments tab → add "Homework" and "Classwork" to your XP tiers</div></div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
-                    <span style="font-size:22px;">🎯</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Try Teaching Mode</div><div style="font-size:13px;color:var(--INK3);">Press the Teaching Mode button in the header during class</div></div>
-                  </div>
+        if(!wiz){openSetupWizard();}
+        const activeWiz=document.getElementById('SETUP-WIZ');
+        if(activeWiz){
+          activeWiz.innerHTML=`<div class="md" style="max-width:560px;">
+            <div class="mh" style="justify-content:center;flex-direction:column;gap:8px;text-align:center;padding:2rem;">
+              <div style="font-size:64px;margin-bottom:8px;">🎉</div>
+              <h2 style="font-family:'Cinzel',serif;font-size:22px;color:var(--GOL);">You're All Set!</h2>
+            </div>
+            <div class="mb" style="text-align:center;">
+              <p style="font-size:16px;line-height:1.7;color:var(--INK3);margin-bottom:1.5rem;">${added} student${added!==1?'s':''} added across ${results.length} class${results.length!==1?'es':''}. Auto-sync will award XP every ${autoSyncIntervalMin} minutes.</p>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:1.5rem;">
+                <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
+                  <span style="font-size:22px;">⚡</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Auto-sync is running</div><div style="font-size:13px;color:var(--INK3);">XP awards automatically in the background</div></div>
                 </div>
-                <button class="btn bm" style="font-size:16px;padding:12px 32px;" onclick="document.getElementById('SETUP-WIZ').style.display='none'">Let's Go! →</button>
+                <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
+                  <span style="font-size:22px;">📚</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Match your category names</div><div style="font-size:13px;color:var(--INK3);">Assignments tab → your categories are "Homework" and "Classwork"</div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
+                  <span style="font-size:22px;">🎯</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Try Teaching Mode</div><div style="font-size:13px;color:var(--INK3);">Press the Teaching Mode button in the header during class</div></div>
+                </div>
               </div>
-            </div>`;
-            wiz.style.display='flex';
-          } else {
-            // Not yet configured — continue through wizard steps
-            wiz.style.display='flex';
-            setTimeout(()=>wizardNext(2),400);
-          }
+              <button class="btn bm" style="font-size:16px;padding:12px 32px;" onclick="document.getElementById('SETUP-WIZ').style.display='none'">Let's Go! →</button>
+            </div>
+          </div>`;
+          activeWiz.style.display='flex';
         }
+      } else {
+        window._wizardWaiting=false;
       }
     });
   }).catch(e=>showEB('Sync error: '+e.message));
@@ -2573,10 +2610,167 @@ function resetChallenge(){
   renderParticipationSetup();
 }
 
+/* ── ATTENDANCE ── */
+const ATT_KEY='dq_att';
+const ATT_RESET_HRS=12;
+let attCls='All';
+let attState={date:null,absent:new Set(),submitted:false};
+
+function loadAttendance(){
+  const raw=localStorage.getItem(ATT_KEY);
+  if(!raw)return;
+  try{
+    const d=JSON.parse(raw);
+    // Check if within 12-hour window
+    if(d.date&&(Date.now()-new Date(d.date).getTime())<ATT_RESET_HRS*60*60*1000){
+      attState={date:d.date,absent:new Set(d.absent||[]),submitted:!!d.submitted};
+    } else {
+      // Expired — clear
+      localStorage.removeItem(ATT_KEY);
+      attState={date:null,absent:new Set(),submitted:false};
+    }
+  }catch(e){}
+}
+
+function saveAttendance(){
+  localStorage.setItem(ATT_KEY,JSON.stringify({
+    date:attState.date||new Date().toISOString(),
+    absent:[...attState.absent],
+    submitted:attState.submitted
+  }));
+}
+
+function renderAttendance(){
+  loadAttendance();
+  const cls=getCls();
+  // Class pills
+  const pillEl=document.getElementById('cp-att');
+  if(pillEl){
+    pillEl.innerHTML=`<span class="pill${attCls==='All'?' active':''}" onclick="setAttCls('All')">All</span>`
+      +cls.map(c=>`<span class="pill${attCls===c?' active':''}" onclick="setAttCls('${c}')">${c}</span>`).join('');
+  }
+  // Reset info
+  const resetEl=document.getElementById('att-reset-info');
+  if(resetEl&&attState.date){
+    const exp=new Date(new Date(attState.date).getTime()+ATT_RESET_HRS*60*60*1000);
+    const rem=Math.max(0,exp-Date.now());
+    const h=Math.floor(rem/3600000);const m=Math.floor((rem%3600000)/60000);
+    resetEl.textContent=`Resets in ${h}h ${m}m`;
+  } else if(resetEl){resetEl.textContent='';}
+  renderAttGrid();
+}
+
+function setAttCls(c){attCls=c;renderAttendance();}
+
+function renderAttGrid(){
+  const list=filt(attCls);
+  const grid=document.getElementById('att-grid');if(!grid)return;
+  const today=new Date().toLocaleDateString();
+  const submitted=attState.submitted;
+
+  grid.innerHTML=list.map(s=>{
+    const isAbsent=attState.absent.has(s.id);
+    const days=s.attendanceDays||0;
+    return`<div class="att-card${isAbsent?' absent':''}${submitted?' submitted':''}"
+      onclick="${submitted?'':''}"
+      onmousedown="${submitted?'':'toggleAttAbsent(\''+s.id+'\')'}">
+      <div class="att-name">${s.name.split(' ')[0]}</div>
+      <div class="att-days">${days}</div>
+      <div class="att-label">days present</div>
+      ${isAbsent?'<div style="font-size:11px;color:#AAA;margin-top:2px;">Absent</div>':''}
+    </div>`;
+  }).join('');
+
+  // Update status bar
+  const present=list.filter(s=>!attState.absent.has(s.id)).length;
+  const absent=attState.absent.size;
+  const statusEl=document.getElementById('att-status-text');
+  const countEl=document.getElementById('att-count-text');
+  const submitBtn=document.getElementById('att-submit-btn');
+  const submittedBadge=document.getElementById('att-submitted-badge');
+
+  if(submitted){
+    if(statusEl)statusEl.textContent='Attendance submitted for today.';
+    if(countEl)countEl.textContent=`${present} present · ${absent} absent · +100 XP awarded`;
+    if(submitBtn)submitBtn.style.display='none';
+    if(submittedBadge)submittedBadge.style.display='block';
+  } else {
+    if(statusEl)statusEl.textContent=absent>0?`${absent} student${absent!==1?'s':''} marked absent — ready to submit.`:'Tap a student to mark them absent.';
+    if(countEl)countEl.textContent=`${present} present · ${absent} absent`;
+    if(submitBtn)submitBtn.style.display='block';
+    if(submittedBadge)submittedBadge.style.display='none';
+  }
+
+  // Attendance history panel
+  const histPanel=document.getElementById('att-history-panel');
+  const histList=document.getElementById('att-history-list');
+  if(histPanel&&histList&&list.some(s=>s.attendanceDays>0)){
+    histPanel.style.display='block';
+    histList.innerHTML=[...list].sort((a,b)=>(b.attendanceDays||0)-(a.attendanceDays||0)).map(s=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--GP);border-radius:var(--R);">
+        ${avHTML(s,28)}
+        <div style="flex:1;">
+          <div style="font-size:14px;color:var(--INK);">${s.name}</div>
+          <div style="font-size:12px;color:var(--GM);">${s.cls||''}</div>
+        </div>
+        <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--M);">${s.attendanceDays||0}d</div>
+      </div>`).join('');
+  } else if(histPanel){histPanel.style.display='none';}
+}
+
+function toggleAttAbsent(id){
+  if(attState.submitted)return;
+  if(!attState.date)attState.date=new Date().toISOString();
+  if(attState.absent.has(id))attState.absent.delete(id);
+  else attState.absent.add(id);
+  saveAttendance();
+  renderAttGrid();
+}
+
+function submitAttendance(){
+  if(attState.submitted){showEB('Attendance already submitted today.');return;}
+  const list=filt(attCls);
+  const presentStudents=list.filter(s=>!attState.absent.has(s.id));
+  if(!list.length){showEB('No students in this class.');return;}
+  if(!confirm(`Submit attendance? ${presentStudents.length} present students will each receive 100 XP. This cannot be undone today.`))return;
+
+  const now=new Date();
+  const dateStr=now.toLocaleDateString();
+  const timeStr=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+
+  presentStudents.forEach(s=>{
+    // Award 100 XP
+    const prevLv=s.lv;
+    s.xp+=100;s.te+=100;s.lv=lvFromXP(s.xp);
+    if(!s.hist)s.hist=[];
+    s.hist.unshift({amt:100,reason:'Attendance — present',time:timeStr,date:dateStr});
+    if(s.hist.length>200)s.hist.pop();
+    // Increment attendance days counter
+    if(!s.attendanceDays)s.attendanceDays=0;
+    s.attendanceDays++;
+    chkBadges(s);
+    if(s.lv>prevLv){addLog(`${s.name} → Level ${s.lv} — ${getRank(s.lv).name}! ${getRank(s.lv).icon}`,'level');luQueue.push(s);}
+    addLog(`${s.name} +100 XP — attendance`,'xp');
+  });
+
+  // Log absences
+  attState.absent.forEach(id=>{
+    const s=students.find(x=>x.id===id);
+    if(s)addLog(`${s.name} — absent`,'event');
+  });
+
+  attState.submitted=true;
+  attState.date=now.toISOString();
+  saveAttendance();
+  save();render();renderAttGrid();
+  processLUQueue();
+  showEB(`✓ Attendance submitted — ${presentStudents.length} students received 100 XP.`);
+}
+
 /* ── TEACHING MODE ── */
 let teachingMode=false;
-const TEACHING_TABS=['roster','award','leaderboard','participation'];// Only these show in Teaching Mode
-const ALL_TABS=['roster','award','leaderboard','cvc','assignments','log','settings'];
+const TEACHING_TABS=['roster','attendance','leaderboard','award','quests','participation'];
+const ALL_TABS=['roster','attendance','leaderboard','award','quests','participation','assignments','log','cvc','settings'];
 
 function toggleTeachingMode(){
   teachingMode=!teachingMode;
@@ -3070,7 +3264,8 @@ function generateCertificates(){
       .cert-date{font-size:13px;color:#A0A0A0;font-style:italic;}
       @media print{
         #cert-control-bar{display:none !important;}
-        #cert-overlay{background:white;padding:0;position:static;}
+        #cert-overlay{background:white !important;padding:0 !important;position:absolute !important;top:0 !important;left:0 !important;width:100% !important;height:auto !important;overflow:visible !important;}
+        body > *:not(#cert-overlay){display:none !important;}
         .cert{margin:0;max-width:100%;page-break-after:always;box-shadow:none;}
         .cert-border{min-height:95vh;}
       }
@@ -3159,8 +3354,9 @@ function exportPrivileges(){
       .priv-sig-line{border-top:1px solid #999;margin-bottom:6px;}
       @media print{
         #priv-control-bar{display:none !important;}
+        #priv-overlay{background:white !important;padding:0 !important;position:absolute !important;top:0 !important;left:0 !important;width:100% !important;height:auto !important;overflow:visible !important;}
+        body > *:not(#priv-overlay){display:none !important;}
         .priv-cert{margin:0;max-width:100%;box-shadow:none;border-radius:0;page-break-after:always;}
-        #priv-overlay{background:white;padding:0;position:static;}
       }
     </style>
     ${pageHTML}`;
@@ -3304,7 +3500,9 @@ function generateClassReport(){
     <style>
       @media print{
         #report-control-bar{display:none !important;}
-        #report-overlay{background:white;padding:0;position:static;}
+        #report-overlay{background:white !important;padding:0 !important;position:absolute !important;top:0 !important;left:0 !important;width:100% !important;height:auto !important;overflow:visible !important;}
+        body > *:not(#report-overlay){display:none !important;}
+        #report-overlay > div[style*="max-width"]{max-width:100% !important;}
       }
     </style>`;
   overlay.style.display='block';
