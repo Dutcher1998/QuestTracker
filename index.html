@@ -277,7 +277,8 @@ html,body{scroll-behavior:auto;}
 .att-card.submitted{cursor:default;}
 .att-name{font-family:'Cinzel',serif;font-size:13px;color:var(--MD);margin-bottom:4px;line-height:1.3;}
 .att-days{font-size:22px;font-family:'Cinzel',serif;color:var(--M);}
-.att-label{font-size:11px;color:var(--GM);}border:2px solid var(--BDG);border-radius:var(--RL);padding:12px;text-align:center;cursor:pointer;transition:all .2s;position:relative;user-select:none;}
+.att-label{font-size:11px;color:var(--GM);}
+.pc-card{background:var(--W);border:2px solid var(--BDG);border-radius:var(--RL);padding:12px;text-align:center;cursor:pointer;transition:all .2s;position:relative;user-select:none;}
 .pc-card:hover{border-color:var(--M);transform:translateY(-1px);box-shadow:0 4px 12px var(--SH);}
 .pc-card.done{background:linear-gradient(135deg,#1A6B2A,#2A8B3A);border-color:#1A6B2A;}
 .pc-card.done .pc-name{color:var(--W);text-decoration:line-through;opacity:.8;}
@@ -860,6 +861,15 @@ html,body{scroll-behavior:auto;}
         </div>
       </div>
       <div class="aws">
+        <h3>Rank configuration</h3>
+        <div style="font-size:13px;color:var(--INK3);margin-bottom:12px;">Customize rank names, icons, and level thresholds. Levels must not overlap. Changes apply immediately.</div>
+        <div id="rank-editor"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <button class="btn bm bsm" onclick="addRank()">+ Add Rank</button>
+          <button class="btn bo bsm" onclick="resetRanks()">Reset to defaults</button>
+        </div>
+      </div>
+      <div class="aws">
         <h3>Season end rewards — configure per rank</h3>
         <p style="font-size:13px;color:var(--INK3);margin-bottom:1rem;">Set physical or class rewards students earn at the end of each season based on their final rank. These display on the student's profile.</p>
         <div id="season-rewards-editor"></div>
@@ -968,12 +978,18 @@ function getTeacherEmails(){
 const TEMAILS=getTeacherEmails();
 
 const LVS=(()=>{const t=[0];for(let i=1;i<=20;i++)t.push(t[i-1]+Math.round(50*Math.pow(i,1.8)));return t;})();
-const RANKS=[
+const RANKS_DEFAULT=[
   {min:1,max:4,name:'Recruit',icon:'🛡️',color:'#5A5A5A',bg:'#F2F2F2',bar:'#9A9A9A'},
   {min:5,max:9,name:'Soldier',icon:'⚔️',color:'#5A3A6B',bg:'#F0EAF5',bar:'#9A7AB0'},
   {min:10,max:14,name:'Captain',icon:'🎖️',color:'#6B1A2A',bg:'#F8EDEF',bar:'#8B2A3E'},
   {min:15,max:20,name:'General',icon:'👑',color:'#3D0A14',bg:'#F0E0E4',bar:'#6B1A2A'}
 ];
+function loadRanks(){
+  try{const r=localStorage.getItem('dq_ranks');if(r)return JSON.parse(r);}catch(e){}
+  return JSON.parse(JSON.stringify(RANKS_DEFAULT));
+}
+function saveRanks(){localStorage.setItem('dq_ranks',JSON.stringify(RANKS));}
+let RANKS=loadRanks();
 const BADGES=[
   {id:'fx',label:'First Blood',desc:'First XP',icon:'🩸',chk:s=>s.te>=1,bg:'#F8EDEF',tx:'#6B1A2A'},
   {id:'c1',label:'Centurion',desc:'100 XP',icon:'💯',chk:s=>s.te>=100,bg:'#F0EAF5',tx:'#4A1A6B'},
@@ -1565,6 +1581,73 @@ function dl(name,csv){
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
+function renderRankEditor(){
+  const el=document.getElementById('rank-editor');if(!el)return;
+  el.innerHTML=RANKS.map((r,i)=>`
+    <div style="display:flex;gap:8px;align-items:center;padding:10px;background:var(--GP);border-radius:var(--R);margin-bottom:6px;flex-wrap:wrap;">
+      <button onclick="openRankEmojiPicker(${i})" style="font-size:22px;width:44px;height:40px;border:1px solid var(--BDG);border-radius:var(--R);background:var(--W);cursor:pointer;" id="rank-icon-btn-${i}">${r.icon}</button>
+      <input class="fi" value="${r.name}" onchange="RANKS[${i}].name=this.value;saveRanks();render();" style="width:120px;" placeholder="Rank name"/>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <span style="font-size:12px;color:var(--GM);">Lv</span>
+        <input class="fi" type="number" value="${r.min}" min="1" max="99" onchange="RANKS[${i}].min=parseInt(this.value)||1;saveRanks();render();" style="width:60px;"/>
+        <span style="font-size:12px;color:var(--GM);">—</span>
+        <input class="fi" type="number" value="${r.max}" min="1" max="99" onchange="RANKS[${i}].max=parseInt(this.value)||1;saveRanks();render();" style="width:60px;"/>
+      </div>
+      ${RANKS.length>1?`<button onclick="deleteRank(${i})" class="btn bd bxs">✕</button>`:''}
+    </div>`).join('');
+}
+
+function openRankEmojiPicker(rankIdx){
+  let mo=document.getElementById('EMOJI-MO');
+  if(!mo){
+    mo=document.createElement('div');mo.id='EMOJI-MO';mo.className='mo';mo.style.zIndex='600';
+    mo.onclick=e=>{if(e.target===mo)mo.style.display='none';};
+    document.body.appendChild(mo);
+  }
+  mo.innerHTML=`<div class="md" style="max-width:440px;">
+    <div class="mh"><h2>Choose Rank Icon</h2><button class="mc" onclick="document.getElementById('EMOJI-MO').style.display='none'">✕</button></div>
+    <div class="mb">
+      <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:6px;">
+        ${EMOJI_BANK.map(e=>`<button onclick="selectRankEmoji(${rankIdx},'${e}')" style="font-size:22px;padding:6px;border:2px solid transparent;border-radius:8px;background:var(--GP);cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor='var(--M)'" onmouseout="this.style.borderColor='transparent'">${e}</button>`).join('')}
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+        <div class="sl" style="margin-bottom:0;">Or type any emoji:</div>
+        <input class="fi" id="rank-emoji-custom" type="text" placeholder="✨" style="width:60px;font-size:20px;text-align:center;" maxlength="4"/>
+        <button class="btn bm bsm" onclick="selectRankEmoji(${rankIdx},document.getElementById('rank-emoji-custom').value||'⭐')">Use</button>
+      </div>
+    </div>
+  </div>`;
+  mo.style.display='flex';
+}
+
+function selectRankEmoji(rankIdx,e){
+  if(!e)return;
+  RANKS[rankIdx].icon=e;
+  saveRanks();render();
+  const btn=document.getElementById(`rank-icon-btn-${rankIdx}`);
+  if(btn)btn.textContent=e;
+  document.getElementById('EMOJI-MO').style.display='none';
+  renderRankEditor();
+}
+
+function addRank(){
+  const maxLv=Math.max(...RANKS.map(r=>r.max));
+  RANKS.push({min:maxLv+1,max:maxLv+5,name:'New Rank',icon:'⭐',color:'#1A6B2A',bg:'#F0F8F0',bar:'#4CAF50'});
+  saveRanks();render();renderRankEditor();
+}
+
+function deleteRank(i){
+  if(RANKS.length<=1){showEB('Must have at least one rank.');return;}
+  if(!confirm(`Delete rank "${RANKS[i].name}"?`))return;
+  RANKS.splice(i,1);saveRanks();render();renderRankEditor();
+}
+
+function resetRanks(){
+  if(!confirm('Reset ranks to defaults?'))return;
+  RANKS=JSON.parse(JSON.stringify(RANKS_DEFAULT));
+  saveRanks();render();renderRankEditor();
+}
+
 function saveTeacherEmails(){
   const raw=document.getElementById('teacher-emails-input')?.value||'';
   const emails=raw.split('\n').map(e=>e.trim().toLowerCase()).filter(Boolean);
@@ -1773,8 +1856,7 @@ function showTab(id){
   document.getElementById('tab-'+id).classList.add('active');
   // Re-render settings content on tab open since elements may not have been visible on initial render
   if(id==='settings'){
-    renderActsTable();renderPrivEditor();renderCustomBadges();renderSeasonRewards();renderXPLevelTable();
-    // Populate teacher emails
+    renderActsTable();renderPrivEditor();renderCustomBadges();renderSeasonRewards();renderXPLevelTable();renderRankEditor();
     const ta=document.getElementById('teacher-emails-input');
     if(ta)ta.value=getTeacherEmails().join('\n');
   }
@@ -2140,7 +2222,7 @@ function renderGoogleBtn(){
 function handleCred(resp){
   const pl=parseJWT(resp.credential);
   curUser={name:pl.name,email:pl.email,picture:pl.picture,googleId:pl.sub};
-  isT=TEMAILS.includes((pl.email||'').toLowerCase());
+  isT=getTeacherEmails().includes((pl.email||'').toLowerCase());
   completeSignIn();
 }
 function parseJWT(t){try{return JSON.parse(atob(t.split('.')[1]));}catch(e){return{};}}
@@ -2873,7 +2955,7 @@ function unsubmitAttendance(){
   showEB(`Attendance unsubmitted for ${attCls}. You can now update and resubmit.`);
 }
 let teachingMode=false;
-const TEACHING_TABS=['roster','attendance','leaderboard','award','quests','participation'];
+const TEACHING_TABS=['attendance','leaderboard','award','quests','participation'];
 const ALL_TABS=['roster','attendance','leaderboard','award','quests','participation','assignments','log','cvc','settings'];
 
 function toggleTeachingMode(){
