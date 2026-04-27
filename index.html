@@ -837,6 +837,13 @@ html,body{scroll-behavior:auto;}
           </div>
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
           <div>
+            <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Teacher accounts</div>
+            <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Add Google email addresses that should have teacher access. One per line. Reload the page after saving.</div>
+            <textarea class="fi" id="teacher-emails-input" style="width:100%;height:100px;resize:vertical;font-size:13px;" placeholder="dutcher@deruytercentral.org&#10;colleague@deruytercentral.org"></textarea>
+            <button class="btn bm bsm" style="margin-top:6px;" onclick="saveTeacherEmails()">Save Teacher Emails</button>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--BDG);"/>
+          <div>
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Full session reset</div>
             <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Clears ALL data — roster, XP, settings, saved periods, attendance — and signs you out. Use to start completely fresh as a new user.</div>
             <button class="btn bd" onclick="fullSessionReset()">🗑️ Reset Everything</button>
@@ -952,7 +959,13 @@ html,body{scroll-behavior:auto;}
 
 <script>
 const GCL_ID='249246305432-o4ukh4lim7k2lfq6hlr3rked9ma5vhe2.apps.googleusercontent.com';
-const TEMAILS=['dutcher@deruytercentral.org'];
+const TEMAILS_DEFAULT=['dutcher@deruytercentral.org'];
+function getTeacherEmails(){
+  const stored=localStorage.getItem('dq_temails');
+  if(stored){try{return JSON.parse(stored);}catch(e){}}
+  return TEMAILS_DEFAULT;
+}
+const TEMAILS=getTeacherEmails();
 
 const LVS=(()=>{const t=[0];for(let i=1;i<=20;i++)t.push(t[i-1]+Math.round(50*Math.pow(i,1.8)));return t;})();
 const RANKS=[
@@ -1552,6 +1565,14 @@ function dl(name,csv){
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
+function saveTeacherEmails(){
+  const raw=document.getElementById('teacher-emails-input')?.value||'';
+  const emails=raw.split('\n').map(e=>e.trim().toLowerCase()).filter(Boolean);
+  if(!emails.length){showEB('Enter at least one teacher email.');return;}
+  localStorage.setItem('dq_temails',JSON.stringify(emails));
+  showEB('Teacher emails saved. Reload the page to apply.');
+}
+
 function fullSessionReset(){
   if(!confirm('This will delete ALL data — roster, XP, settings, marking periods, attendance records, and sign you out. There is absolutely no way to undo this. Are you sure?'))return;
   if(!confirm('Final confirmation: Delete everything and start fresh?'))return;
@@ -1751,7 +1772,12 @@ function showTab(id){
   document.getElementById('pnl-'+id).classList.add('active');
   document.getElementById('tab-'+id).classList.add('active');
   // Re-render settings content on tab open since elements may not have been visible on initial render
-  if(id==='settings'){renderActsTable();renderPrivEditor();renderCustomBadges();renderSeasonRewards();renderXPLevelTable();}
+  if(id==='settings'){
+    renderActsTable();renderPrivEditor();renderCustomBadges();renderSeasonRewards();renderXPLevelTable();
+    // Populate teacher emails
+    const ta=document.getElementById('teacher-emails-input');
+    if(ta)ta.value=getTeacherEmails().join('\n');
+  }
   if(id==='assignments'){renderCategoryTable();renderAutoAwardLog();renderAssignClassPills();}
   if(id==='participation'){renderParticipationSetup();}
   if(id==='attendance'){renderAttendance();}
@@ -1805,7 +1831,25 @@ function renderSV(){
   if(!sv)return;
   const s=students.find(x=>x.id==curSid);
   if(!s){
-    sv.innerHTML=`<div style="max-width:640px;margin:0 auto;padding:2rem 20px;"><div class="nfm"><div style="font-size:40px;margin-bottom:12px;">🚀</div><h2>Not found in roster</h2><p style="font-size:14px;color:var(--INK3);margin-top:8px;">Your account (<strong>${curUser?curUser.email:''}</strong>) is not linked to a student yet.<br/>Ask Mr. Dutcher to sync Google Classroom or add you manually.</p></div></div>`;
+    // Check if this user is actually a teacher who should have teacher view
+    const email=(curUser?.email||'').toLowerCase();
+    const knownTeacher=getTeacherEmails().includes(email);
+    if(knownTeacher){
+      // This teacher is not in TEMAILS yet but signed in — show notice
+      sv.innerHTML=`<div style="max-width:640px;margin:0 auto;padding:2rem 20px;"><div class="nfm">
+        <div style="font-size:40px;margin-bottom:12px;">👨‍🏫</div>
+        <h2>Teacher account detected</h2>
+        <p style="font-size:14px;color:var(--INK3);margin-top:8px;">Your email <strong>${email}</strong> is registered as a teacher. Please reload the page — you should see the teacher dashboard.</p>
+        <button class="btn bm" style="margin-top:16px;" onclick="location.reload()">Reload</button>
+      </div></div>`;
+      return;
+    }
+    sv.innerHTML=`<div style="max-width:640px;margin:0 auto;padding:2rem 20px;"><div class="nfm">
+      <div style="font-size:40px;margin-bottom:12px;">🚀</div>
+      <h2>Not found in roster</h2>
+      <p style="font-size:14px;color:var(--INK3);margin-top:8px;">Your account (<strong>${curUser?curUser.email:''}</strong>) is not linked to a student yet.</p>
+      <p style="font-size:14px;color:var(--INK3);margin-top:8px;">Ask your teacher to sync Google Classroom — your account will be matched automatically once synced.</p>
+    </div></div>`;
     return;
   }
   // Only store photo if this is a real student sign-in, not a teacher preview
@@ -3982,8 +4026,9 @@ function runSync(){
         let xpToAward=0;const reasons=[];
         if(cat.sub>0){xpToAward+=cat.sub;reasons.push(`submitted (+${cat.sub})`);}
         if(pctScore!==null){
+          // Bonuses are additive: 85%+ stacks with submit, perfect stacks with both
+          if(pctScore>=85&&cat.bonus85>0){xpToAward+=cat.bonus85;reasons.push(`85%+ (+${cat.bonus85})`);}
           if(pctScore===100&&cat.bonus100>0){xpToAward+=cat.bonus100;reasons.push(`perfect score (+${cat.bonus100})`);}
-          else if(pctScore>=85&&cat.bonus85>0){xpToAward+=cat.bonus85;reasons.push(`85%+ score (+${cat.bonus85})`);}
         }
 
         // Calculate delta — what has already been awarded for this submission
