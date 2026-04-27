@@ -1899,7 +1899,7 @@ function selectIcon(ic){
   if(el){el.style.borderColor='var(--M)';el.style.background='var(--MP)';}
 }
 // Profanity filter — basic word list, extensible
-const BAD_WORDS=['fuck','shit','ass','bitch','cunt','dick','pussy','bastard','damn','hell','crap','piss','cock','whore','slut','nigger','faggot','retard','gay','penis','vagina','fag','horny','boobs','sex'];
+const BAD_WORDS=['fuck','shit','ass','bitch','cunt','dick','pussy','bastard','damn','hell','crap','piss','cock','whore','slut','nigger','faggot','retard','gay','penis','vagina','fag','horny','boobs','sex','rape','anal'];
 function moderateMotto(text){
   if(!text)return{ok:true,clean:''};
   let clean=text.trim();
@@ -2179,7 +2179,15 @@ function doSync(){
       // Advance wizard if it is open on step 2
       const wiz=document.getElementById('SETUP-WIZ');
       if(wiz&&wiz.style.display!=='none'){
-        setTimeout(()=>wizardNext(2),600);
+        // If marking periods and XP categories already configured, go straight to finish
+        const alreadyConfigured=savedPeriods.length>0&&xpCategories.length>0;
+        if(alreadyConfigured){
+          localStorage.setItem('dq_setup_done','1');
+          wiz.style.display='none';
+          showEB('Setup complete! Classes synced and ready to go.');
+        } else {
+          setTimeout(()=>wizardNext(2),600);
+        }
       }
     });
   }).catch(e=>showEB('Sync error: '+e.message));
@@ -2747,20 +2755,18 @@ function applyCurrentPeriod(){
 
 function startAutoSync(){
   stopAutoSync();
-  if(autoSyncIntervalMin===0)return;
-  if(!isT)return;// Teacher only
+  if(autoSyncIntervalMin===0||!isT)return;
   autoSyncPaused=false;
-  updateAutoSyncUI('syncing');
-  // Apply current grading period automatically
-  applyCurrentPeriod();
-  // Run immediately on start
-  silentSync();
-  // Then on interval
+  const btn=document.getElementById('asi-btn');
+  if(btn)btn.textContent='Pause';
+  // Don't run immediately — wait one full interval so initial load settles
   autoSyncTimer=setInterval(()=>{
     if(!autoSyncPaused)silentSync();
   },autoSyncIntervalMin*60*1000);
   // Countdown display
+  autoSyncLastRun=Date.now();// Treat start as last run so countdown shows correctly
   autoSyncCountdown=setInterval(updateAutoSyncCountdown,1000);
+  updateAutoSyncUI('active');
 }
 
 function stopAutoSync(){
@@ -2773,42 +2779,67 @@ function toggleAutoSync(){
   autoSyncPaused=!autoSyncPaused;
   const btn=document.getElementById('asi-btn');
   if(btn)btn.textContent=autoSyncPaused?'Resume':'Pause';
-  updateAutoSyncUI(autoSyncPaused?'paused':'active');
-  if(!autoSyncPaused)silentSync();
+  if(autoSyncPaused){
+    updateAutoSyncUI('paused');
+  } else {
+    // Resume — set last run to now so countdown starts fresh
+    autoSyncLastRun=Date.now();
+    updateAutoSyncUI('active');
+    // Restart countdown interval if it stopped
+    if(!autoSyncCountdown)autoSyncCountdown=setInterval(updateAutoSyncCountdown,1000);
+    silentSync();
+  }
 }
 
 function updateAutoSyncInterval(){
   const sel=document.getElementById('auto-sync-interval');
   autoSyncIntervalMin=parseInt(sel?.value||'5');
   localStorage.setItem('dq_asi',autoSyncIntervalMin);
+  const ind=document.getElementById('auto-sync-indicator');
   if(autoSyncIntervalMin===0){
     stopAutoSync();
-    document.getElementById('auto-sync-indicator').style.display='none';
+    if(ind)ind.style.display='none';
   } else {
+    if(ind)ind.style.display='flex';
     startAutoSync();
-    document.getElementById('auto-sync-indicator').style.display='flex';
   }
 }
 
 function updateAutoSyncCountdown(){
-  if(!autoSyncLastRun||autoSyncPaused)return;
+  if(autoSyncPaused)return;
+  const lbl=document.getElementById('asi-label');if(!lbl)return;
+  if(!autoSyncLastRun){lbl.textContent='Auto-sync active';return;}
   const elapsed=Math.floor((Date.now()-autoSyncLastRun)/1000);
   const remaining=Math.max(0,autoSyncIntervalMin*60-elapsed);
   const m=Math.floor(remaining/60);
   const s=remaining%60;
-  const lbl=document.getElementById('asi-label');
-  if(lbl)lbl.textContent=`Next sync ${m}:${String(s).padStart(2,'0')}`;
+  lbl.textContent=`Next sync ${m}:${String(s).padStart(2,'0')}`;
 }
 
 function updateAutoSyncUI(state){
   const dot=document.getElementById('asi-dot');
   const lbl=document.getElementById('asi-label');
+  const btn=document.getElementById('asi-btn');
   if(!dot||!lbl)return;
-  if(state==='syncing'){dot.style.background='#C9923A';lbl.textContent='Syncing...';}
-  else if(state==='active'){dot.style.background='#4CAF50';updateAutoSyncCountdown();}
-  else if(state==='paused'){dot.style.background='#888';lbl.textContent='Paused';}
-  else if(state==='error'){dot.style.background='#F44336';lbl.textContent='Sync error';}
-  else if(state==='done'){dot.style.background='#4CAF50';}
+  if(state==='syncing'){
+    dot.style.background='#C9923A';
+    lbl.textContent='Syncing...';
+  } else if(state==='active'){
+    dot.style.background='#4CAF50';
+    if(btn)btn.textContent='Pause';
+    updateAutoSyncCountdown();
+  } else if(state==='paused'){
+    dot.style.background='#888';
+    lbl.textContent='Paused';
+    if(btn)btn.textContent='Resume';
+  } else if(state==='error'){
+    dot.style.background='#F44336';
+    lbl.textContent='Sync error';
+  } else if(state==='done'){
+    dot.style.background='#4CAF50';
+    autoSyncLastRun=Date.now();
+    updateAutoSyncCountdown();
+  }
 }
 
 function silentSync(){
@@ -2816,16 +2847,12 @@ function silentSync(){
     if(tclient)tclient.requestAccessToken();
     return;
   }
-  // Auto-apply current grading period
   applyCurrentPeriod();
-  autoSyncLastRun=Date.now();
   updateAutoSyncUI('syncing');
-  // Call the core sync — results handled by onSyncComplete hook
   syncAssignments();
 }
 
 function initAutoSync(){
-  // Load saved interval preference
   const saved=localStorage.getItem('dq_asi');
   if(saved!==null){
     autoSyncIntervalMin=parseInt(saved);
@@ -2833,19 +2860,17 @@ function initAutoSync(){
     if(sel)sel.value=String(autoSyncIntervalMin);
   }
   if(autoSyncIntervalMin>0&&isT){
-    document.getElementById('auto-sync-indicator').style.display='flex';
+    const ind=document.getElementById('auto-sync-indicator');
+    if(ind)ind.style.display='flex';
     startAutoSync();
   }
 }
 
 function onSyncComplete(awarded,xpTotal,flaggedCount){
-  autoSyncLastRun=Date.now();
   updateAutoSyncUI('done');
   if(awarded>0){
-    // Show banner for every new award
     showEB(`⚡ Auto-sync: ${awarded} award${awarded!==1?'s':''} — ${xpTotal} XP distributed.${flaggedCount?' ⚠️ '+flaggedCount+' flagged.':''}`);
   }
-  updateAutoSyncCountdown();
 }
 function renderCategoryTable(){
   const tb=document.getElementById('cat-tbody');if(!tb)return;
