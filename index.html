@@ -1299,7 +1299,10 @@ function sCard(s,forAward){
     ${!forAward?`<button class="sc2-menu" onclick="event.stopPropagation();quickAward2('${s.id}')">+XP</button>`:''}
     <div class="sct">${avHTML(s,38)}<div><div class="sn2">${s.name}</div><div class="sr" style="color:${rk.color};">${rk.icon} Lv ${s.lv} · ${rk.name}</div></div></div>
     <div class="xbw"><div class="xb" style="width:${p}%;background:${rk.bar};"></div></div>
-    <div class="xl">${s.lv>=20?'Max level':xpIn(s)+' / '+xpNeed(s.lv)+' XP'}</div>
+    <div class="xl" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>${s.lv>=20?'Max level':xpIn(s)+' / '+xpNeed(s.lv)+' XP'}</span>
+      ${(s.attendanceDays>0)?`<span style="font-size:12px;color:var(--GM);">📅 ${s.attendanceDays}d</span>`:''}
+    </div>
     ${bdg?`<div class="br2">${bdg}</div>`:''}
   </div>`;
 }
@@ -1863,10 +1866,10 @@ function renderPV(){
       ${avEl}
       <div style="flex:1;min-width:0;">
         <div class="pv-name">${s.name}</div>
-        <div class="pv-rank">${rk.icon} ${rk.name} · Lv ${s.lv}</div>
+        <div class="pv-rank">${rk.icon} ${rk.name}</div>
         <div class="pv-xpbar-wrap"><div class="pv-xpbar" style="width:${p}%;background:${rk.bar};"></div></div>
       </div>
-      <div class="pv-xp">${s.xp}</div>
+      <div class="pv-xp" style="font-size:22px;">Lv ${s.lv}</div>
     </div>`;
   }).join('');
   const recent=log.filter(l=>l.type==='xp'||l.type==='level').slice(0,8).map(l=>l.msg).join('   ·   ');
@@ -2706,27 +2709,11 @@ function tapStudent(id){
   if(!pcState.active)return;
   const count=pcState.tally[id]||0;
   if(count>=pcState.needed){
-    // Undo last tap — remove XP
+    // Undo last tap — just decrement counter, no XP change
     pcState.tally[id]=Math.max(0,count-1);
-    const s=students.find(x=>x.id===id);
-    if(s){
-      const tapXP=Math.round(pcState.xp/pcState.needed);
-      s.xp=Math.max(0,s.xp-tapXP);s.te=Math.max(0,s.te-tapXP);s.lv=lvFromXP(s.xp);
-      if(s.hist&&s.hist.length)s.hist.shift();// Remove last entry
-      save();
-    }
   } else {
     pcState.tally[id]=count+1;
-    const s=students.find(x=>x.id===id);
-    if(s){
-      const tapXP=Math.round(pcState.xp/pcState.needed);
-      s.xp+=tapXP;s.te+=tapXP;s.lv=lvFromXP(s.xp);
-      const now=new Date();
-      if(!s.hist)s.hist=[];
-      s.hist.unshift({amt:tapXP,reason:'Class Challenge participation',time:now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),date:now.toLocaleDateString()});
-      if(s.hist.length>200)s.hist.pop();
-      chkBadges(s);addLog(`${s.name} +${tapXP} XP — participation`,'xp');save();
-    }
+    // No XP awarded yet — XP only given when challenge fully completes
   }
   renderChallengeGrid();
   // Check completion — only count present students
@@ -2758,21 +2745,25 @@ function updateMeter(list){
 
 function awardChallengeXP(){
   const list=filt(pcState.cls).filter(s=>!pcState.absent.has(s.id));
-  const bonusXP=Math.round(pcState.xp*0.5);
+  const xpEach=pcState.xp;
+  const now=new Date();
+  const dateStr=now.toLocaleDateString();
+  const timeStr=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   list.forEach(s=>{
     if((pcState.tally[s.id]||0)>=pcState.needed){
-      s.xp+=bonusXP;s.te+=bonusXP;s.lv=lvFromXP(s.xp);
-      const now=new Date();
+      const prevLv=s.lv;
+      s.xp+=xpEach;s.te+=xpEach;s.lv=lvFromXP(s.xp);
       if(!s.hist)s.hist=[];
-      s.hist.unshift({amt:bonusXP,reason:'Class Challenge bonus — full class completed!',time:now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),date:now.toLocaleDateString()});
+      s.hist.unshift({amt:xpEach,reason:'Class Challenge — full class participated!',time:timeStr,date:dateStr});
       if(s.hist.length>200)s.hist.pop();
       chkBadges(s);
+      if(s.lv>prevLv){addLog(`${s.name} → Level ${s.lv} — ${getRank(s.lv).name}!`,'level');luQueue.push(s);}
     }
   });
   pcState.awarded=true;
-  addLog(`Class challenge complete — ${bonusXP} bonus XP to ${list.length} present students`,'event');
+  addLog(`Class challenge complete — ${xpEach} XP awarded to ${list.length} present students`,'event');
   save();render();
-  showEB(`🎉 ${bonusXP} bonus XP awarded to ${list.length} present students!`);
+  showEB(`🎉 Challenge complete! ${xpEach} XP awarded to ${list.length} students!`);
   setTimeout(resetChallenge,2000);
 }
 
@@ -2865,13 +2856,10 @@ function renderAttGrid(){
 
   grid.innerHTML=list.map(s=>{
     const isAbsent=state.absent.has(s.id);
-    const days=s.attendanceDays||0;
     return`<div class="att-card${isAbsent?' absent':''}${submitted?' submitted':''}"
       onmousedown="${submitted?'':'toggleAttAbsent(\''+s.id+'\')'}">
       <div class="att-name">${s.name.split(' ')[0]}</div>
-      <div class="att-days">${days}</div>
-      <div class="att-label">days present</div>
-      ${isAbsent?'<div style="font-size:11px;color:#AAA;margin-top:2px;">Absent</div>':''}
+      <div style="font-size:12px;color:${isAbsent?'#AAA':'var(--INK3)'};margin-top:4px;">${isAbsent?'Absent':'Present'}</div>
     </div>`;
   }).join('');
 
@@ -2898,18 +2886,9 @@ function renderAttGrid(){
     if(unsubBtn)unsubBtn.style.display='none';
   }
 
-  // History panel — show all classes combined
+  // History panel removed — days present shown on Roster tab per student
   const histPanel=document.getElementById('att-history-panel');
-  const histList=document.getElementById('att-history-list');
-  if(histPanel&&histList&&students.some(s=>s.attendanceDays>0)){
-    histPanel.style.display='block';
-    histList.innerHTML=[...students].filter(s=>s.cls===attCls).sort((a,b)=>(b.attendanceDays||0)-(a.attendanceDays||0)).map(s=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--GP);border-radius:var(--R);">
-        ${avHTML(s,28)}
-        <div style="flex:1;"><div style="font-size:14px;color:var(--INK);">${s.name}</div></div>
-        <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--M);">${s.attendanceDays||0}d</div>
-      </div>`).join('');
-  } else if(histPanel){histPanel.style.display='none';}
+  if(histPanel)histPanel.style.display='none';
 }
 
 function toggleAttAbsent(id){
