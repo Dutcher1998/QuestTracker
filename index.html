@@ -839,8 +839,8 @@ html,body{scroll-behavior:auto;}
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
           <div>
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Teacher accounts</div>
-            <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Add Google email addresses that should have teacher access. One per line. Reload the page after saving.</div>
-            <textarea class="fi" id="teacher-emails-input" style="width:100%;height:100px;resize:vertical;font-size:13px;" placeholder="dutcher@deruytercentral.org&#10;colleague@deruytercentral.org"></textarea>
+            <div style="font-size:13px;color:var(--INK3);margin-bottom:6px;">Emails listed here get teacher access. <strong>Important:</strong> this list is saved in your browser only. To give permanent access to colleagues on all devices, add their email directly to the HTML file (search for <code style="font-size:12px;background:var(--GP);padding:1px 4px;border-radius:3px;">TEMAILS_HARDCODED</code>) and redeploy to GitHub.</div>
+            <textarea class="fi" id="teacher-emails-input" style="width:100%;height:90px;resize:vertical;font-size:13px;" placeholder="dutcher@deruytercentral.org&#10;colleague@deruytercentral.org"></textarea>
             <button class="btn bm bsm" style="margin-top:6px;" onclick="saveTeacherEmails()">Save Teacher Emails</button>
           </div>
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
@@ -969,13 +969,26 @@ html,body{scroll-behavior:auto;}
 
 <script>
 const GCL_ID='249246305432-o4ukh4lim7k2lfq6hlr3rked9ma5vhe2.apps.googleusercontent.com';
-const TEMAILS_DEFAULT=['dutcher@deruytercentral.org'];
+// TEACHER EMAILS — add colleague emails directly here so they work for everyone
+// The Settings UI can add more without touching this file
+const TEMAILS_HARDCODED=[
+  'dutcher@deruytercentral.org',
+  'moorhead@deruytercentral.org',
+  'kempf@deruytercentral.org',
+  // Add colleague emails here, e.g.:
+  // 'colleague@deruytercentral.org',
+];
 function getTeacherEmails(){
-  const stored=localStorage.getItem('dq_temails');
-  if(stored){try{return JSON.parse(stored);}catch(e){}}
-  return TEMAILS_DEFAULT;
+  // Merge hardcoded list with any added via Settings UI
+  try{
+    const stored=localStorage.getItem('dq_temails');
+    if(stored){
+      const extra=JSON.parse(stored);
+      return [...new Set([...TEMAILS_HARDCODED,...extra])];
+    }
+  }catch(e){}
+  return TEMAILS_HARDCODED;
 }
-const TEMAILS=getTeacherEmails();
 
 const LVS=(()=>{const t=[0];for(let i=1;i<=20;i++)t.push(t[i-1]+Math.round(50*Math.pow(i,1.8)));return t;})();
 const RANKS_DEFAULT=[
@@ -1652,10 +1665,11 @@ function saveTeacherEmails(){
   const raw=document.getElementById('teacher-emails-input')?.value||'';
   const emails=raw.split('\n').map(e=>e.trim().toLowerCase()).filter(Boolean);
   if(!emails.length){showEB('Enter at least one teacher email.');return;}
-  localStorage.setItem('dq_temails',JSON.stringify(emails));
-  // Clear session so next load re-evaluates teacher status with new list
+  // Save only the extras (hardcoded ones are always included automatically)
+  const extras=emails.filter(e=>!TEMAILS_HARDCODED.includes(e));
+  localStorage.setItem('dq_temails',JSON.stringify(emails));// Save full list for display
   sessionStorage.removeItem('dq_session');
-  showEB('Teacher emails saved. Other teachers should now reload the page to get access.');
+  showEB(`Saved ${emails.length} teacher email${emails.length!==1?'s':''}. Note: to give permanent access to new teachers, add their email directly to the file and redeploy to GitHub.`);
 }
 
 function fullSessionReset(){
