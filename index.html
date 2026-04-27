@@ -768,7 +768,8 @@ html,body{scroll-behavior:auto;}
         <p style="font-size:13px;color:var(--INK3);margin-bottom:1rem;">Create custom badges like "Master Mapper" and award them to individual students.</p>
         <div id="cb-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-          <input class="fi" id="cb-icon" type="text" value="🗺️" style="width:60px;" placeholder="Icon"/>
+          <button class="btn bo" id="cb-icon-btn" onclick="openEmojiPicker()" style="font-size:22px;width:52px;height:44px;padding:0;border-radius:var(--R);" title="Choose an emoji icon">🗺️</button>
+          <input type="hidden" id="cb-icon" value="🗺️"/>
           <input class="fi" id="cb-label" type="text" placeholder="Badge name (e.g. Master Mapper)" style="flex:1;"/>
           <input class="fi" id="cb-desc" type="text" placeholder="Description" style="flex:1;"/>
           <button class="btn bm bsm" onclick="addCustomBadge()">Create</button>
@@ -1496,7 +1497,12 @@ function dl(name,csv){
 function clearRoster(){
   if(!confirm('This will remove ALL students, XP history, and the event log. Cannot be undone. Continue?'))return;
   students=[];log=[];selIds.clear();curSid=null;
-  save();render();showEB('Roster cleared. You can now re-sync Google Classroom.');
+  // Also clear awarded submissions since roster is empty
+  awardedSubmissions={};autoAwardLog=[];
+  localStorage.removeItem('dq_setup_done');
+  save();render();
+  showEB('Roster cleared.');
+  setTimeout(()=>openSetupWizard(),400);
 }
 function clearPics(){students.forEach(s=>s.pic=null);save();render();showEB('All profile photos cleared.');}
 function refetchPhotos(){
@@ -1893,7 +1899,7 @@ function selectIcon(ic){
   if(el){el.style.borderColor='var(--M)';el.style.background='var(--MP)';}
 }
 // Profanity filter — basic word list, extensible
-const BAD_WORDS=['fuck','shit','ass','bitch','cunt','dick','pussy','bastard','damn','hell','crap','piss','cock','whore','slut','nigger','faggot','retard'];
+const BAD_WORDS=['fuck','shit','ass','bitch','cunt','dick','pussy','bastard','damn','hell','crap','piss','cock','whore','slut','nigger','faggot','retard','gay','penis','vagina','fag','horny','boobs','sex'];
 function moderateMotto(text){
   if(!text)return{ok:true,clean:''};
   let clean=text.trim();
@@ -2165,8 +2171,16 @@ function doSync(){
 
     // Now fetch profile photos via People API for all synced students
     fetchProfilePhotos(allGids).then(()=>{
-      curSid=matchUser(curUser);save();render();
+      curSid=matchUser(curUser);
+      // Clear awarded submissions on every roster sync so fresh assignments get processed
+      awardedSubmissions={};autoAwardLog=[];
+      save();render();
       showEB(`Synced ${results.length} class${results.length!==1?'es':''} — ${added} new student${added!==1?'s':''} added.`);
+      // Advance wizard if it is open on step 2
+      const wiz=document.getElementById('SETUP-WIZ');
+      if(wiz&&wiz.style.display!=='none'){
+        setTimeout(()=>wizardNext(2),600);
+      }
     });
   }).catch(e=>showEB('Sync error: '+e.message));
 }
@@ -3050,7 +3064,7 @@ function exportPrivileges(){
     document.body.appendChild(overlay);
   }
   overlay.innerHTML=`
-    <div style="text-align:center;margin-bottom:20px;display:flex;gap:10px;justify-content:center;align-items:center;position:sticky;top:0;background:#f0f0f0;padding:12px;z-index:10;border-bottom:2px solid #ccc;flex-wrap:wrap;">
+    <div id="priv-control-bar" style="text-align:center;margin-bottom:20px;display:flex;gap:10px;justify-content:center;align-items:center;position:sticky;top:0;background:#f0f0f0;padding:12px;z-index:10;border-bottom:2px solid #ccc;flex-wrap:wrap;">
       <span style="font-family:'Cinzel',serif;font-size:14px;color:#3D0A14;">${eligible.length} student${eligible.length!==1?'s':''} with earned privileges</span>
       <button onclick="window.print()" style="font-size:15px;padding:10px 22px;background:#6B1A2A;color:white;border:none;border-radius:6px;cursor:pointer;">🖨️ Print All</button>
       <button onclick="document.getElementById('priv-overlay').style.display='none'" style="font-size:15px;padding:10px 22px;background:#666;color:white;border:none;border-radius:6px;cursor:pointer;">✕ Close</button>
@@ -3075,9 +3089,9 @@ function exportPrivileges(){
       .priv-sig-block{flex:1;text-align:center;font-size:12px;color:#888;}
       .priv-sig-line{border-top:1px solid #999;margin-bottom:6px;}
       @media print{
-        #priv-overlay > div:first-child{display:none;}
+        #priv-control-bar{display:none !important;}
         .priv-cert{margin:0;max-width:100%;box-shadow:none;border-radius:0;page-break-after:always;}
-        #priv-overlay{background:white;padding:0;}
+        #priv-overlay{background:white;padding:0;position:static;}
       }
     </style>
     ${pageHTML}`;
@@ -3225,6 +3239,52 @@ function generateClassReport(){
       }
     </style>`;
   overlay.style.display='block';
+}
+
+const EMOJI_BANK=[
+  // Academic
+  '📚','📖','✏️','📝','🎓','🏫','🔬','🔭','🗺️','📐','📏','💡','🧪','🧬','⚗️',
+  // Achievement
+  '🏆','🥇','🥈','🥉','🎖️','🏅','⭐','🌟','💫','✨','🎯','🎪','🎨','🎭','🎬',
+  // Nature/Animals
+  '🦁','🐯','🦊','🐺','🦅','🦉','🐉','🦄','🐬','🦈','🦋','🌿','🌊','🔥','⚡',
+  // History/Social Studies
+  '🏛️','⚔️','🛡️','👑','🗿','🏰','🗽','🌍','🌎','🌏','🗺️','🧭','⚖️','🕊️','📜',
+  // Fun/Games
+  '🎮','🎲','🃏','♟️','🎸','🎵','🎤','🚀','🛸','💎','💰','🔮','🧩','🎁','🎉',
+  // Character/Virtue
+  '💪','🧠','❤️','🤝','👍','🙌','👏','🌈','☀️','🌙','💯','🔑','🗝️','🌱','🦸',
+];
+
+function openEmojiPicker(){
+  let mo=document.getElementById('EMOJI-MO');
+  if(!mo){
+    mo=document.createElement('div');mo.id='EMOJI-MO';mo.className='mo';mo.style.zIndex='600';
+    mo.onclick=e=>{if(e.target===mo)mo.style.display='none';};
+    document.body.appendChild(mo);
+  }
+  mo.innerHTML=`<div class="md" style="max-width:440px;">
+    <div class="mh"><h2>Choose Icon</h2><button class="mc" onclick="document.getElementById('EMOJI-MO').style.display='none'">✕</button></div>
+    <div class="mb">
+      <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:6px;">
+        ${EMOJI_BANK.map(e=>`<button onclick="selectEmoji('${e}')" style="font-size:22px;padding:6px;border:2px solid transparent;border-radius:8px;background:var(--GP);cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor='var(--M)'" onmouseout="this.style.borderColor='transparent'">${e}</button>`).join('')}
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+        <div class="sl" style="margin-bottom:0;">Or type any emoji:</div>
+        <input class="fi" id="emoji-custom" type="text" placeholder="✨" style="width:60px;font-size:20px;text-align:center;" maxlength="4"/>
+        <button class="btn bm bsm" onclick="selectEmoji(document.getElementById('emoji-custom').value||'🏅')">Use</button>
+      </div>
+    </div>
+  </div>`;
+  mo.style.display='flex';
+}
+
+function selectEmoji(e){
+  if(!e)return;
+  document.getElementById('cb-icon').value=e;
+  const btn=document.getElementById('cb-icon-btn');
+  if(btn)btn.textContent=e;
+  document.getElementById('EMOJI-MO').style.display='none';
 }
 
 function loadSavedPeriods(){
