@@ -2193,37 +2193,41 @@ function doSync(){
       awardedSubmissions={};autoAwardLog=[];
       save();render();
       showEB(`Synced ${results.length} class${results.length!==1?'es':''} — ${added} new student${added!==1?'s':''} added.`);
-      // Advance wizard if it is open on step 2
-      const wiz=document.getElementById('SETUP-WIZ');
-      if(wiz&&wiz.style.display!=='none'){
+      // Show wizard completion if user came from wizard step 2
+      if(window._wizardWaiting){
+        window._wizardWaiting=false;
         const alreadyConfigured=savedPeriods.length>0&&xpCategories.length>0;
-        if(alreadyConfigured){
-          localStorage.setItem('dq_setup_done','1');
-          // Show a proper completion screen matching step 1 style
-          wiz.innerHTML=`<div class="md" style="max-width:560px;">
-            <div class="mh" style="justify-content:center;flex-direction:column;gap:8px;text-align:center;padding:2rem;">
-              <div style="font-size:64px;margin-bottom:8px;">🎉</div>
-              <h2 style="font-family:'Cinzel',serif;font-size:22px;color:var(--GOL);">Setup Complete!</h2>
-            </div>
-            <div class="mb" style="text-align:center;">
-              <p style="font-size:16px;line-height:1.7;color:var(--INK3);margin-bottom:1.5rem;">Your classes are synced and Quest Tracker is ready to go. Auto-sync will award XP in the background every ${autoSyncIntervalMin} minutes.</p>
-              <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:1.5rem;">
-                <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
-                  <span style="font-size:22px;">⚡</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Auto-sync is running</div><div style="font-size:13px;color:var(--INK3);">Assignments award XP automatically every ${autoSyncIntervalMin} minutes</div></div>
-                </div>
-                <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
-                  <span style="font-size:22px;">📚</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Go to Assignments tab</div><div style="font-size:13px;color:var(--INK3);">Set your category names to match Google Classroom exactly</div></div>
-                </div>
-                <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
-                  <span style="font-size:22px;">🎯</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Try Teaching Mode</div><div style="font-size:13px;color:var(--INK3);">Click the Teaching Mode button in the header during class</div></div>
-                </div>
+        localStorage.setItem('dq_setup_done','1');
+        const wiz=document.getElementById('SETUP-WIZ');
+        if(wiz){
+          if(alreadyConfigured){
+            wiz.innerHTML=`<div class="md" style="max-width:560px;">
+              <div class="mh" style="justify-content:center;flex-direction:column;gap:8px;text-align:center;padding:2rem;">
+                <div style="font-size:64px;margin-bottom:8px;">🎉</div>
+                <h2 style="font-family:'Cinzel',serif;font-size:22px;color:var(--GOL);">You're All Set!</h2>
               </div>
-              <button class="btn bm" style="font-size:16px;padding:12px 32px;" onclick="document.getElementById('SETUP-WIZ').style.display='none'">Let's Go! →</button>
-            </div>
-          </div>`;
-          wiz.style.display='flex';
-        } else {
-          setTimeout(()=>wizardNext(2),600);
+              <div class="mb" style="text-align:center;">
+                <p style="font-size:16px;line-height:1.7;color:var(--INK3);margin-bottom:1.5rem;">${added} new student${added!==1?'s':''} added across ${results.length} class${results.length!==1?'es':''}. Auto-sync will award XP every ${autoSyncIntervalMin} minutes.</p>
+                <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:1.5rem;">
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
+                    <span style="font-size:22px;">⚡</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Auto-sync is running</div><div style="font-size:13px;color:var(--INK3);">XP awards automatically in the background</div></div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
+                    <span style="font-size:22px;">📚</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Match your category names</div><div style="font-size:13px;color:var(--INK3);">Assignments tab → add "Homework" and "Classwork" to your XP tiers</div></div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--GP);border-radius:var(--R);text-align:left;">
+                    <span style="font-size:22px;">🎯</span><div><div style="font-family:'Cinzel',serif;font-size:14px;color:var(--MD);">Try Teaching Mode</div><div style="font-size:13px;color:var(--INK3);">Press the Teaching Mode button in the header during class</div></div>
+                  </div>
+                </div>
+                <button class="btn bm" style="font-size:16px;padding:12px 32px;" onclick="document.getElementById('SETUP-WIZ').style.display='none'">Let's Go! →</button>
+              </div>
+            </div>`;
+            wiz.style.display='flex';
+          } else {
+            // Not yet configured — continue through wizard steps
+            wiz.style.display='flex';
+            setTimeout(()=>wizardNext(2),400);
+          }
         }
       }
     });
@@ -2653,7 +2657,7 @@ function showWizardStep(step,mo){
       nextLabel:'I\'ll do this later →',
       skip:false,
       body:`<p style="font-size:15px;color:var(--INK3);margin-bottom:1.5rem;line-height:1.7;">Click the button below to connect your Google Classroom account and import your class rosters. This will bring in all your students automatically.</p>
-      <button class="btn bm" style="width:100%;font-size:15px;padding:14px;" onclick="syncGC();document.getElementById('SETUP-WIZ').style.display='none';showTab('roster');">🔗 Connect Google Classroom</button>
+      <button class="btn bm" style="width:100%;font-size:15px;padding:14px;" onclick="window._wizardWaiting=true;syncGC();document.getElementById('SETUP-WIZ').style.display='none';">🔗 Connect Google Classroom</button>
       <p style="font-size:13px;color:var(--INK3);margin-top:1rem;text-align:center;">You can also do this later from the Roster tab.</p>`
     },
     3:{
@@ -3266,7 +3270,7 @@ function generateClassReport(){
     :'';
 
   overlay.innerHTML=`
-    <div style="text-align:center;margin-bottom:20px;display:flex;gap:10px;justify-content:center;align-items:center;position:sticky;top:0;background:#f0f0f0;padding:12px;z-index:10;border-bottom:2px solid #ccc;flex-wrap:wrap;">
+    <div id="report-control-bar" style="text-align:center;margin-bottom:20px;display:flex;gap:10px;justify-content:center;align-items:center;position:sticky;top:0;background:#f0f0f0;padding:12px;z-index:10;border-bottom:2px solid #ccc;flex-wrap:wrap;">
       <span style="font-family:'Cinzel',serif;font-size:14px;color:#3D0A14;">Class Report Card — ${date}</span>
       <button onclick="window.print()" style="font-size:15px;padding:10px 22px;background:#6B1A2A;color:white;border:none;border-radius:6px;cursor:pointer;">🖨️ Print</button>
       <button onclick="document.getElementById('report-overlay').style.display='none'" style="font-size:15px;padding:10px 22px;background:#666;color:white;border:none;border-radius:6px;cursor:pointer;">✕ Close</button>
@@ -3299,8 +3303,8 @@ function generateClassReport(){
     </div>
     <style>
       @media print{
-        #report-overlay > div:first-child{display:none;}
-        #report-overlay{background:white;padding:0;}
+        #report-control-bar{display:none !important;}
+        #report-overlay{background:white;padding:0;position:static;}
       }
     </style>`;
   overlay.style.display='block';
