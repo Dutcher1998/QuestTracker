@@ -678,6 +678,7 @@ html,body{scroll-behavior:auto;}
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
             <div id="att-submitted-badge" style="display:none;font-family:'Cinzel',serif;font-size:13px;color:var(--GOL);padding:4px 12px;border:1px solid var(--GOL);border-radius:20px;">✓ Submitted Today</div>
+            <button id="att-unsubmit-btn" onclick="unsubmitAttendance()" style="display:none;font-size:11px;padding:4px 10px;border-radius:var(--R);border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.5);cursor:pointer;font-family:'Cinzel',serif;">↩ Unsubmit</button>
             <button class="btn bgold" id="att-submit-btn" onclick="submitAttendance()">Submit Attendance · +100 XP</button>
           </div>
         </div>
@@ -833,6 +834,12 @@ html,body{scroll-behavior:auto;}
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Re-run setup wizard</div>
             <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Reopens the first-time setup wizard to reconfigure Google Classroom, marking periods, and XP categories.</div>
             <button class="btn bg bsm" onclick="localStorage.removeItem('dq_setup_done');window._wizardWaiting=false;openSetupWizard();">↩ Open Setup Wizard</button>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--BDG);"/>
+          <div>
+            <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Full session reset</div>
+            <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Clears ALL data — roster, XP, settings, saved periods, attendance — and signs you out. Use to start completely fresh as a new user.</div>
+            <button class="btn bd" onclick="fullSessionReset()">🗑️ Reset Everything</button>
           </div>
         </div>
       </div>
@@ -1543,6 +1550,18 @@ function dl(name,csv){
   a.href=url;a.download=name;
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function fullSessionReset(){
+  if(!confirm('This will delete ALL data — roster, XP, settings, marking periods, attendance records, and sign you out. There is absolutely no way to undo this. Are you sure?'))return;
+  if(!confirm('Final confirmation: Delete everything and start fresh?'))return;
+  // Clear all localStorage keys used by the app
+  const keys=['dq_s','dq_l','dq_p','dq_a','dq_q','dq_cb','dq_cats','dq_awarded','dq_aal','dq_sr','dq_periods','dq_setup_done','dq_tm','dq_asi',ATT_KEY,'dq_session'];
+  keys.forEach(k=>localStorage.removeItem(k));
+  sessionStorage.clear();
+  // Sign out and reload
+  showEB('All data cleared. Reloading...');
+  setTimeout(()=>location.reload(),1000);
 }
 
 function clearRoster(){
@@ -2711,11 +2730,15 @@ function renderAttGrid(){
     if(countEl)countEl.textContent=`${present} present · ${absent} absent · +100 XP awarded`;
     if(submitBtn)submitBtn.style.display='none';
     if(submittedBadge)submittedBadge.style.display='block';
+    const unsubBtn=document.getElementById('att-unsubmit-btn');
+    if(unsubBtn)unsubBtn.style.display='block';
   } else {
     if(statusEl)statusEl.textContent=absent>0?`${absent} student${absent!==1?'s':''} marked absent — ready to submit.`:`Tap a student to mark them absent.`;
     if(countEl)countEl.textContent=`${list.length} students · ${present} present · ${absent} absent`;
     if(submitBtn)submitBtn.style.display='block';
     if(submittedBadge)submittedBadge.style.display='none';
+    const unsubBtn=document.getElementById('att-unsubmit-btn');
+    if(unsubBtn)unsubBtn.style.display='none';
   }
 
   // History panel — show all classes combined
@@ -2780,7 +2803,31 @@ function submitAttendance(){
   showEB(`✓ Attendance submitted for ${attCls} — ${presentStudents.length} students received 100 XP.`);
 }
 
-/* ── TEACHING MODE ── */
+function unsubmitAttendance(){
+  const state=getAttState(attCls);
+  if(!state.submitted){showEB('Attendance has not been submitted yet.');return;}
+  if(!confirm(`Unsubmit attendance for ${attCls}? This will reverse the 100 XP awarded to present students. You can then mark a student absent or present and resubmit.`))return;
+
+  // Reverse the 100 XP from all present students in this class
+  const list=filt(attCls);
+  const presentStudents=list.filter(s=>!state.absent.has(s.id));
+  presentStudents.forEach(s=>{
+    s.xp=Math.max(0,s.xp-100);
+    s.te=Math.max(0,s.te-100);
+    s.lv=lvFromXP(s.xp);
+    s.attendanceDays=Math.max(0,(s.attendanceDays||0)-1);
+    // Remove the most recent attendance entry from history
+    if(s.hist&&s.hist.length){
+      const idx=s.hist.findIndex(h=>h.reason&&h.reason.includes('Attendance'));
+      if(idx>=0)s.hist.splice(idx,1);
+    }
+  });
+
+  state.submitted=false;
+  saveAttendance();
+  save();render();renderAttGrid();
+  showEB(`Attendance unsubmitted for ${attCls}. You can now update and resubmit.`);
+}
 let teachingMode=false;
 const TEACHING_TABS=['roster','attendance','leaderboard','award','quests','participation'];
 const ALL_TABS=['roster','attendance','leaderboard','award','quests','participation','assignments','log','cvc','settings'];
@@ -3888,11 +3935,15 @@ function runSync(){
         if(!isTurnedIn)return; // Not submitted — skip silently
 
         const submissionKey=sub.id;
-        if(awardedSubmissions[submissionKey])return; // Already processed
+        const prevStatus=awardedSubmissions[submissionKey];
+
+        // true = fully awarded, skip entirely
+        // 'zero' = was graded zero, re-check in case grade was corrected
+        // 'flagged' = previously unflaggable (no student/category), re-check
+        // undefined = never processed
+        if(prevStatus===true)return;
 
         const s=students.find(x=>x.gid===sub.userId);
-        // Grade: assignedGrade is set when teacher grades, draftGrade is teacher's draft
-        // A missing/null assignedGrade means ungraded (submitted but not yet marked)
         const rawGrade=sub.assignedGrade;
         const hasGrade=rawGrade!==undefined&&rawGrade!==null&&rawGrade!=='';
         const grade=hasGrade?parseFloat(rawGrade):null;
@@ -3901,58 +3952,73 @@ function runSync(){
 
         // Flag: no matching student
         if(!s){
-          flagged.push({reason:'Student not in roster',assignment:cw.title,course:course.name,userId:sub.userId,score:pctScore});
-          awardedSubmissions[submissionKey]='flagged';
+          if(prevStatus!=='flagged'){
+            flagged.push({reason:'Student not in roster',assignment:cw.title,course:course.name,userId:sub.userId,score:pctScore});
+            awardedSubmissions[submissionKey]='flagged';
+          }
           return;
         }
 
         // Flag: no matching category
         if(!cat){
-          flagged.push({reason:`Category "${catName||'(none)'}" not configured`,assignment:cw.title,course:course.name,student:s.name,score:pctScore});
-          awardedSubmissions[submissionKey]='flagged';
+          if(prevStatus!=='flagged'){
+            flagged.push({reason:`Category "${catName||'(none)'}" not configured`,assignment:cw.title,course:course.name,student:s.name,score:pctScore});
+            awardedSubmissions[submissionKey]='flagged';
+          }
           return;
         }
 
-        // Zero grade = explicitly marked as not completed — no XP
+        // Zero grade = not completed — no XP, but keep checking on future syncs
         if(hasGrade&&(grade===0||isNaN(grade))){
-          awardedSubmissions[submissionKey]='zero';
-          flagged.push({reason:'Grade is 0 — no XP awarded',assignment:cw.title,course:course.name,student:s.name,score:0});
+          // Only add to flagged list if not already flagged as zero
+          if(prevStatus!=='zero'){
+            flagged.push({reason:'Grade is 0 — no XP awarded',assignment:cw.title,course:course.name,student:s.name,score:0});
+            awardedSubmissions[submissionKey]='zero';
+          }
           return;
         }
 
+        // Calculate what XP this submission SHOULD have earned
         let xpToAward=0;const reasons=[];
-
-        // Submit XP: award if turned in regardless of grade (unless grade is 0, handled above)
         if(cat.sub>0){xpToAward+=cat.sub;reasons.push(`submitted (+${cat.sub})`);}
-
-        // Grade bonuses: only apply when teacher has actually graded
         if(pctScore!==null){
           if(pctScore===100&&cat.bonus100>0){xpToAward+=cat.bonus100;reasons.push(`perfect score (+${cat.bonus100})`);}
           else if(pctScore>=85&&cat.bonus85>0){xpToAward+=cat.bonus85;reasons.push(`85%+ score (+${cat.bonus85})`);}
         }
-        // Note: if pctScore===null (turned in but not yet graded), only Submit XP fires.
-        // Grade bonuses will fire on next sync once teacher grades it.
 
-        if(xpToAward===0){awardedSubmissions[submissionKey]=true;return;}
+        // Calculate delta — what has already been awarded for this submission
+        // We track awarded XP per submission to calculate top-ups
+        const prevAwarded=awardedSubmissions[submissionKey+'_xp']||0;
+        const delta=xpToAward-prevAwarded;
 
-        // Award XP
+        if(delta<=0){
+          // Nothing new to award — mark as fully processed if not already
+          if(xpToAward>0)awardedSubmissions[submissionKey]=true;
+          return;
+        }
+
+        // Award the delta XP (could be full amount or just grade bonus top-up)
         const prevLv=s.lv;
-        s.xp+=xpToAward;s.te+=xpToAward;s.lv=lvFromXP(s.xp);
+        s.xp+=delta;s.te+=delta;s.lv=lvFromXP(s.xp);
         if(!s.hist)s.hist=[];
         const now=new Date();
         const dateStr=now.toLocaleDateString();const timeStr=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-        s.hist.unshift({amt:xpToAward,reason:`${cw.title} (${reasons.join(', ')})`,time:timeStr,date:dateStr});
+        const isTopUp=prevAwarded>0;
+        s.hist.unshift({amt:delta,reason:`${cw.title} (${isTopUp?'grade updated — ':''+(reasons.join(', '))})`,time:timeStr,date:dateStr});
         if(s.hist.length>200)s.hist.pop();
         chkBadges(s);
-        awardedSubmissions[submissionKey]=true;
 
-        const logMsg=`${s.name} +${xpToAward} XP — "${cw.title}" [${catName}]${pctScore!==null?' · '+pctScore+'%':''} (${reasons.join(', ')})`;
+        // Mark submission as fully awarded, store total awarded XP for future delta checks
+        awardedSubmissions[submissionKey]=true;
+        awardedSubmissions[submissionKey+'_xp']=xpToAward;
+
+        const logMsg=`${s.name} +${delta} XP — "${cw.title}" [${catName}]${pctScore!==null?' · '+pctScore+'%':''}${isTopUp?' (grade top-up)':''} (${reasons.join(', ')})`;
         addLog(logMsg,'xp');
-        autoAwardLog.unshift({student:s.name,assignment:cw.title,category:catName,score:pctScore,xp:xpToAward,date:dateStr+' '+timeStr,reasons:reasons.join(', ')});
+        autoAwardLog.unshift({student:s.name,assignment:cw.title,category:catName,score:pctScore,xp:delta,date:dateStr+' '+timeStr,reasons:reasons.join(', ')+(isTopUp?' [top-up]':'')});
         if(autoAwardLog.length>500)autoAwardLog.pop();
         if(s.lv>prevLv){addLog(`${s.name} → Level ${s.lv} — ${getRank(s.lv).name}! ${getRank(s.lv).icon}`,'level');luQueue.push(s);}
 
-        totalAwarded++;totalXP+=xpToAward;
+        totalAwarded++;totalXP+=delta;
       });
     });
 
