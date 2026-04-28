@@ -512,12 +512,7 @@ html,body{scroll-behavior:auto;}
 
     <!-- ROSTER -->
     <div class="pnl active" id="pnl-roster">
-      <div class="rb">
-        <div class="rc" style="background:#F2F2F2;border-color:#9A9A9A;"><div class="rci">🛡️</div><div class="rcn" style="color:#5A5A5A;">Recruit</div><div class="rcr" style="color:#5A5A5A;">Lv 1–4</div></div>
-        <div class="rc" style="background:#F0EAF5;border-color:#9A7AB0;"><div class="rci">⚔️</div><div class="rcn" style="color:#5A3A6B;">Soldier</div><div class="rcr" style="color:#5A3A6B;">Lv 5–9</div></div>
-        <div class="rc" style="background:#F8EDEF;border-color:#8B2A3E;"><div class="rci">🎖️</div><div class="rcn" style="color:#6B1A2A;">Captain</div><div class="rcr" style="color:#6B1A2A;">Lv 10–14</div></div>
-        <div class="rc" style="background:#F0E0E4;border-color:#6B1A2A;"><div class="rci">👑</div><div class="rcn" style="color:#3D0A14;">General</div><div class="rcr" style="color:#3D0A14;">Lv 15–20</div></div>
-      </div>
+      <div class="rb" id="rank-summary-bar"></div>
       <div class="sl">Filter by class</div>
       <div class="cp" id="cp-r"></div>
       <div class="sl">Add student manually</div>
@@ -621,6 +616,7 @@ html,body{scroll-behavior:auto;}
             </div>
           </div>
           <button class="btn bm" style="padding:12px 24px;font-size:15px;" onclick="startChallenge()">🎯 Start Challenge</button>
+        <button class="btn bo bsm" onclick="openQuickParticipation()" title="Opens a small floating window for tracking participation without switching tabs">⚡ Quick Window</button>
         </div>
       </div>
 
@@ -812,6 +808,8 @@ html,body{scroll-behavior:auto;}
           <button class="btn bm bsm" onclick="addCustomBadge()">Create</button>
         </div>
       </div>
+      <div class="aws">
+        <h3>Roster &amp; account management</h3>
         <div style="display:flex;flex-direction:column;gap:10px;">
           <div>
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Clear synced roster</div>
@@ -835,18 +833,6 @@ html,body{scroll-behavior:auto;}
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Re-run setup wizard</div>
             <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Reopens the first-time setup wizard to reconfigure Google Classroom, marking periods, and XP categories.</div>
             <button class="btn bg bsm" onclick="localStorage.removeItem('dq_setup_done');window._wizardWaiting=false;openSetupWizard();">↩ Open Setup Wizard</button>
-          </div>
-          <hr style="border:none;border-top:1px solid var(--BDG);"/>
-          <div>
-            <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Teacher accounts</div>
-            <div style="background:var(--GOP);border:1px solid rgba(201,146,58,.3);border-radius:var(--R);padding:10px 12px;font-size:13px;color:#7A5500;margin-bottom:10px;">
-              ✓ Anyone with a <strong>@deruytercentral.org</strong> email automatically gets teacher access.<br/>
-              ✓ Anyone with a <strong>@deruyterrockets.org</strong> email automatically gets student access.<br/>
-              No configuration needed — domain-based access works for everyone on any device.
-            </div>
-            <div style="font-size:13px;color:var(--INK3);margin-bottom:6px;">Add individual emails here if you need to grant access to someone outside these domains (e.g. a substitute or administrator):</div>
-            <textarea class="fi" id="teacher-emails-input" style="width:100%;height:70px;resize:vertical;font-size:13px;" placeholder="substitute@gmail.com&#10;admin@example.com"></textarea>
-            <button class="btn bm bsm" style="margin-top:6px;" onclick="saveTeacherEmails()">Save Extra Emails</button>
           </div>
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
           <div>
@@ -974,28 +960,16 @@ html,body{scroll-behavior:auto;}
 
 <script>
 const GCL_ID='249246305432-o4ukh4lim7k2lfq6hlr3rked9ma5vhe2.apps.googleusercontent.com';
-// DOMAIN-BASED ACCESS CONTROL
-// Anyone with a @deruytercentral.org email gets teacher access
-// Anyone with a @deruyterrockets.org email gets student access
+// DOMAIN-BASED ACCESS CONTROL — no configuration needed
 const TEACHER_DOMAINS=['deruytercentral.org'];
 const STUDENT_DOMAINS=['deruyterrockets.org'];
 
-function getTeacherEmails(){
-  // Still support manually added emails via Settings as a fallback
-  try{
-    const stored=localStorage.getItem('dq_temails');
-    if(stored)return JSON.parse(stored);
-  }catch(e){}
-  return[];
-}
+function getTeacherEmails(){return[];}// No longer used for access control
 
 function isTeacherEmail(email){
   if(!email)return false;
-  const e=email.toLowerCase().trim();
-  const domain=e.split('@')[1]||'';
-  if(TEACHER_DOMAINS.includes(domain))return true;
-  if(getTeacherEmails().includes(e))return true;
-  return false;
+  const domain=(email.toLowerCase().split('@')[1])||'';
+  return TEACHER_DOMAINS.includes(domain);
 }
 
 function isStudentEmail(email){
@@ -1301,7 +1275,7 @@ function sCard(s,forAward){
     <div class="xbw"><div class="xb" style="width:${p}%;background:${rk.bar};"></div></div>
     <div class="xl" style="display:flex;justify-content:space-between;align-items:center;">
       <span>${s.lv>=20?'Max level':xpIn(s)+' / '+xpNeed(s.lv)+' XP'}</span>
-      ${(s.attendanceDays>0)?`<span style="font-size:12px;color:var(--GM);">📅 ${s.attendanceDays}d</span>`:''}
+      ${(s.attendanceDays>0)?`<span style="font-size:12px;color:var(--GM);cursor:pointer;" onclick="event.stopPropagation();editAttDays('${s.id}')" title="Click to adjust">📅 ${s.attendanceDays}d</span>`:''}
     </div>
     ${bdg?`<div class="br2">${bdg}</div>`:''}
   </div>`;
@@ -1323,6 +1297,9 @@ function updClassSel(){
 
 function renderRoster(){
   updHero();renderPills('cp-r',rcls,'setRC');updClassSel();
+  // Render rank summary bar using current RANKS
+  const rb=document.getElementById('rank-summary-bar');
+  if(rb)rb.innerHTML=RANKS.map(r=>`<div class="rc" style="background:${r.bg};border-color:${r.bar};"><div class="rci">${r.icon}</div><div class="rcn" style="color:${r.color};">${r.name}</div><div class="rcr" style="color:${r.color};">Lv ${r.min}–${r.max}</div></div>`).join('');
   const list=filt(rcls);
   document.getElementById('sg-r').innerHTML=list.length?list.map(s=>sCard(s,false)).join(''):`<p style="font-size:13px;color:var(--INK3);grid-column:1/-1;">No students in this class.</p>`;
 }
@@ -1358,7 +1335,7 @@ function renderLB(){
       <div class="lbp">${i<3?medals[i]:i+1}</div>${avHTML(s,28)}
       <div class="lbn">${s.name}${badgeHtml} <span style="font-size:11px;color:var(--GM);">${s.cls||''}</span></div>
       <span class="lbt" style="background:${rk.bg};color:${rk.color};">${rk.icon} ${rk.name}</span>
-      <div class="lbx">${s.xp} XP</div>
+      <div class="lbx">${teachingMode?`Lv ${s.lv}`:s.xp+' XP'}</div>
     </div>`;
   }).join('');
 }
@@ -1539,20 +1516,16 @@ function render(){renderRoster();renderAwardGrid();renderLB();renderCVC();render
 
 function renderSeasonRewards(){
   const el=document.getElementById('season-rewards-editor');if(!el)return;
-  const tiers=[
-    {id:'sv_recruit',icon:'🛡️',label:'Recruit'},
-    {id:'sv_soldier',icon:'⚔️',label:'Soldier'},
-    {id:'sv_captain',icon:'🎖️',label:'Captain'},
-    {id:'sv_general',icon:'👑',label:'General'}
-  ];
-  el.innerHTML=tiers.map(t=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--BDG);">
-      <span style="font-size:18px;flex-shrink:0;">${t.icon}</span>
-      <span style="font-family:'Cinzel',serif;font-size:12px;min-width:80px;color:var(--MD);">${t.label}</span>
-      <input class="fi" style="flex:1;" value="${seasonRewards[t.id]||''}" 
-        placeholder="Reward for ${t.label} rank..."
-        onchange="seasonRewards['${t.id}']=this.value;save();"/>
-    </div>`).join('');
+  el.innerHTML=RANKS.map(r=>{
+    const key='sv_'+r.name.toLowerCase().replace(/\s+/g,'_');
+    return`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--BDG);">
+      <span style="font-size:18px;flex-shrink:0;">${r.icon}</span>
+      <span style="font-family:'Cinzel',serif;font-size:12px;min-width:80px;color:var(--MD);">${r.name}</span>
+      <input class="fi" style="flex:1;" value="${seasonRewards[key]||''}" 
+        placeholder="Reward for ${r.name}..."
+        onchange="seasonRewards['${key}']=this.value;save();"/>
+    </div>`;
+  }).join('');
 }
 
 function renderXPLevelTable(){
@@ -1864,12 +1837,12 @@ function renderPV(){
     return`<div class="pv-card${i<3?' '+topCls[i]:''}">
       <div class="pv-pos">${i<3?medals[i]:i+1}</div>
       ${avEl}
-      <div style="flex:1;min-width:0;">
-        <div class="pv-name">${s.name}</div>
+      <div style="flex:1;min-width:0;overflow:hidden;">
+        <div class="pv-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.name}</div>
         <div class="pv-rank">${rk.icon} ${rk.name}</div>
         <div class="pv-xpbar-wrap"><div class="pv-xpbar" style="width:${p}%;background:${rk.bar};"></div></div>
       </div>
-      <div class="pv-xp" style="font-size:22px;">Lv ${s.lv}</div>
+      <div class="pv-xp" style="font-size:22px;flex-shrink:0;min-width:60px;text-align:right;">Lv ${s.lv}</div>
     </div>`;
   }).join('');
   const recent=log.filter(l=>l.type==='xp'||l.type==='level').slice(0,8).map(l=>l.msg).join('   ·   ');
@@ -2968,6 +2941,90 @@ let teachingMode=false;
 const TEACHING_TABS=['attendance','leaderboard','award','quests','participation'];
 const ALL_TABS=['roster','attendance','leaderboard','award','quests','participation','assignments','log','cvc','settings'];
 
+function openQuickParticipation(){
+  if(!pcState.active){showEB('Start a challenge first, then open the quick window.');return;}
+  const list=filt(pcState.cls).filter(s=>!pcState.absent.has(s.id));
+  const names=list.map(s=>({id:s.id,name:s.name.split(' ')[0],count:pcState.tally[s.id]||0,needed:pcState.needed,done:(pcState.tally[s.id]||0)>=pcState.needed}));
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Quick Participation</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Georgia,serif;background:#3D0A14;color:white;padding:10px;overflow-y:auto;}
+h3{font-size:14px;color:#E8C97A;margin-bottom:6px;letter-spacing:1px;}
+.info{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:8px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;}
+.btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:8px 4px;text-align:center;cursor:pointer;user-select:none;transition:all .15s;}
+.btn:hover{background:rgba(255,255,255,.15);}
+.btn.done{background:#1A6B2A;border-color:#2A8B3A;}
+.name{font-size:12px;font-weight:bold;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tally{font-size:18px;color:#E8C97A;}
+.meter{margin-top:10px;background:rgba(255,255,255,.15);border-radius:4px;height:8px;overflow:hidden;}
+.meter-fill{height:100%;background:#C9923A;transition:width .3s;}
+.footer{margin-top:8px;font-size:11px;color:rgba(255,255,255,.4);text-align:center;}
+</style></head><body>
+<h3>🎯 ${pcState.cls==='All'?'Class':''+pcState.cls} Challenge</h3>
+<div class="info">Tap a student each time they participate.</div>
+<div class="grid" id="grid"></div>
+<div class="meter"><div class="meter-fill" id="meter" style="width:0%"></div></div>
+<div class="footer" id="footer"></div>
+<script>
+var students=${JSON.stringify(names)};
+var needed=${pcState.needed};
+function doRender(){
+  var done=students.filter(function(s){return s.done;}).length;
+  document.getElementById('meter').style.width=Math.round((done/students.length)*100)+'%';
+  document.getElementById('footer').textContent=done+' of '+students.length+' completed';
+  document.getElementById('grid').innerHTML=students.map(function(s){
+    return'<div class="btn'+(s.done?' done':'')+'" onclick="tap(\''+s.id+'\')"><div class="name">'+s.name+'</div><div class="tally">'+s.count+'/'+needed+'</div></div>';
+  }).join('');
+}
+function tap(id){
+  var s=students.find(function(x){return x.id===id;});if(!s)return;
+  if(s.count>=needed)s.count=Math.max(0,s.count-1);else s.count++;
+  s.done=s.count>=needed;
+  localStorage.setItem('dq_qp_tap',JSON.stringify({id:id,count:s.count,ts:Date.now()}));
+  doRender();
+}
+setInterval(function(){
+  var raw=localStorage.getItem('dq_qp_sync');
+  if(raw){try{var d=JSON.parse(raw);if(d)students=d;doRender();localStorage.removeItem('dq_qp_sync');}catch(e){}}
+},800);
+doRender();
+<\/script></body></html>`;
+  const w=window.open('','QuestParticipation','width=340,height=480,resizable=yes,scrollbars=yes');
+  if(!w){showEB('Popup blocked. Allow popups for this site in your browser settings.');return;}
+  w.document.write(html);w.document.close();
+  if(window._qpInterval)clearInterval(window._qpInterval);
+  window._qpInterval=setInterval(()=>{
+    const raw=localStorage.getItem('dq_qp_tap');
+    if(!raw)return;
+    try{
+      const d=JSON.parse(raw);
+      if(!d.id||!d.ts||Date.now()-d.ts>5000)return;
+      pcState.tally[d.id]=d.count;
+      localStorage.removeItem('dq_qp_tap');
+      const list2=filt(pcState.cls).filter(s=>!pcState.absent.has(s.id));
+      const allDone=list2.every(s=>(pcState.tally[s.id]||0)>=pcState.needed);
+      if(allDone&&!pcState.awarded){
+        document.getElementById('pc-complete').style.display='block';
+        document.getElementById('pc-complete-msg').textContent=pcState.prize?`Every student participated! Class prize: ${pcState.prize}`:'Every student participated!';
+        spawnConfetti();
+      }
+      renderChallengeGrid();
+    }catch(e){}
+  },300);
+}
+
+function editAttDays(id){
+  const s=students.find(x=>x.id===id);if(!s)return;
+  const val=prompt(`Adjust days present for ${s.name}.\nCurrent: ${s.attendanceDays||0} days\nEnter new value:`,s.attendanceDays||0);
+  if(val===null)return;
+  const n=parseInt(val);
+  if(isNaN(n)||n<0){showEB('Please enter a valid number (0 or more).');return;}
+  s.attendanceDays=n;
+  save();render();
+  showEB(`${s.name}: days present updated to ${n}.`);
+}
+
 function toggleTeachingMode(){
   teachingMode=!teachingMode;
   const btn=document.getElementById('tm-btn');
@@ -3190,12 +3247,11 @@ function startAutoSync(){
   autoSyncPaused=false;
   const btn=document.getElementById('asi-btn');
   if(btn)btn.textContent='Pause';
-  // Don't run immediately — wait one full interval so initial load settles
+  autoSyncLastRun=Date.now();
   autoSyncTimer=setInterval(()=>{
-    if(!autoSyncPaused)silentSync();
+    if(!autoSyncPaused){autoSyncLastRun=Date.now();silentSync();}
   },autoSyncIntervalMin*60*1000);
-  // Countdown display
-  autoSyncLastRun=Date.now();// Treat start as last run so countdown shows correctly
+  if(autoSyncCountdown)clearInterval(autoSyncCountdown);
   autoSyncCountdown=setInterval(updateAutoSyncCountdown,1000);
   updateAutoSyncUI('active');
 }
@@ -3299,8 +3355,9 @@ function initAutoSync(){
 }
 
 function onSyncComplete(awarded,xpTotal,flaggedCount){
-  suppressLevelUp=false;// Re-enable level-up celebrations
-  luQueue=[];// Clear any queued level-ups from sync
+  suppressLevelUp=false;
+  luQueue=[];
+  autoSyncLastRun=Date.now();// Reset countdown after each successful sync
   updateAutoSyncUI('done');
   if(awarded>0){
     showEB(`⚡ Auto-sync: ${awarded} award${awarded!==1?'s':''} — ${xpTotal} XP distributed.${flaggedCount?' ⚠️ '+flaggedCount+' flagged.':''}`);
