@@ -3339,14 +3339,7 @@ function tap(id){
   if(s&&!s.absent){if(s.count>=state.needed)s.count=Math.max(0,s.count-1);else s.count++;s.done=s.count>=state.needed;spRender();}
   chrome.runtime.sendMessage({type:'TAP_STUDENT',id:id}).catch(function(){});
 }
-function markAbsent(id){
-  updateLocalStudent(id,{absent:true,count:0,done:false});spRender();
-  chrome.runtime.sendMessage({type:'MARK_ABSENT',id:id}).catch(function(){});
-}
-function markPresent(id){
-  updateLocalStudent(id,{absent:false,count:0,done:false});spRender();
-  chrome.runtime.sendMessage({type:'MARK_PRESENT',id:id}).catch(function(){});
-}
+// absent/present handled in markAbsent/markPresent above
 function spRender(){
   const idle=document.getElementById('idle'),grid=document.getElementById('grid'),
     status=document.getElementById('status'),comp=document.getElementById('comp');
