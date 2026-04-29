@@ -2643,51 +2643,93 @@ let pcState={
 };
 
 // Sync challenge state to localStorage so the Chrome extension can read it
-function syncPCState(){
-  if(!pcState.active){
-    localStorage.setItem('dq_qp_data',JSON.stringify({active:false}));
-    return;
+function getPCList(){return filt(pcState.cls);}
+function getPCPresent(list){return (list||getPCList()).filter(s=>!pcState.absent.has(s.id));}
+
+function checkPCComplete(){
+  if(!pcState.active)return false;
+  const list=getPCList();
+  const present=getPCPresent(list);
+  const allDone=present.length>0&&present.every(s=>(pcState.tally[s.id]||0)>=pcState.needed);
+  const comp=document.getElementById('pc-complete');
+  if(allDone&&!pcState.awarded){
+    if(comp)comp.style.display='block';
+    const msg=pcState.prize
+      ?`Every student participated! Class prize: ${pcState.prize}`
+      :`Every present student participated ${pcState.needed} time${pcState.needed!==1?'s':''}! Outstanding!`;
+    const msgEl=document.getElementById('pc-complete-msg');
+    if(msgEl)msgEl.textContent=msg;
+    spawnConfetti();
+    if(window.qpShowComplete)window.qpShowComplete();
+  }else if(comp&&!allDone){
+    comp.style.display='none';
   }
+  return allDone;
+}
+
+function syncPCState(){
   try{
-    const list=filt(pcState.cls).filter(s=>!pcState.absent.has(s.id));
-    const names=list.map(s=>({
-      id:s.id,
-      name:s.name.split(' ')[0],
-      count:pcState.tally[s.id]||0,
-      needed:pcState.needed,
-      done:(pcState.tally[s.id]||0)>=pcState.needed
-    }));
+    if(!pcState.active){
+      localStorage.setItem('dq_qp_data',JSON.stringify({active:false}));
+      return;
+    }
+    // Include absent students too, so the extension can show them and mark them present again.
+    const list=getPCList();
+    const studentsForExtension=list.map(s=>{
+      const absent=pcState.absent.has(s.id);
+      const count=pcState.tally[s.id]||0;
+      return{
+        id:s.id,
+        name:s.name.split(' ')[0],
+        count:count,
+        needed:pcState.needed,
+        done:!absent&&count>=pcState.needed,
+        absent:absent
+      };
+    });
+    const present=getPCPresent(list);
+    const done=present.filter(s=>(pcState.tally[s.id]||0)>=pcState.needed).length;
     localStorage.setItem('dq_qp_data',JSON.stringify({
       active:true,
-      students:names,
+      students:studentsForExtension,
       needed:pcState.needed,
       cls:pcState.cls==='All'?'All Classes':pcState.cls,
       prize:pcState.prize||'',
-      awarded:pcState.awarded
+      awarded:pcState.awarded,
+      total:present.length,
+      done:done,
+      absentCount:list.length-present.length
     }));
   }catch(e){}
 }
 
-// Global qpTap so extension content script can call window.qpTap(id)
-window.qpTap=function(id){
+function pcTapStudent(id){
   if(!pcState.active)return;
+  if(pcState.absent.has(id))return;
   const count=pcState.tally[id]||0;
-  if(count>=pcState.needed)pcState.tally[id]=Math.max(0,count-1);
-  else pcState.tally[id]=count+1;
-  syncPCState();
+  pcState.tally[id]=count>=pcState.needed?Math.max(0,count-1):count+1;
   renderChallengeGrid();
+  syncPCState();
   if(window._qpPaint)window._qpPaint();
-  const list=filt(pcState.cls).filter(s=>!pcState.absent.has(s.id));
-  const present=list.filter(s=>!pcState.absent.has(s.id));
-  if(present.length>0&&present.every(s=>(pcState.tally[s.id]||0)>=pcState.needed)&&!pcState.awarded){
-    const comp=document.getElementById('pc-complete');
-    if(comp)comp.style.display='block';
-    const msg=document.getElementById('pc-complete-msg');
-    if(msg)msg.textContent=pcState.prize?`Every student participated! Class prize: ${pcState.prize}`:'Every student participated!';
-    spawnConfetti();
-    if(window.qpShowComplete)qpShowComplete();
-  }
-};
+  checkPCComplete();
+}
+
+// Global functions used by the extension and the quick floating window.
+window.qpTap=pcTapStudent;
+window.qpAbsent=function(id){markAbsent(id);};
+window.qpPresent=function(id){markPresent(id);};
+window.qpAward=function(){awardChallengeXP();};
+
+// Safer bridge for the Chrome extension: content scripts can post messages to the page
+// without relying on inline injected scripts, which can fail under stricter page security.
+window.addEventListener('message',function(e){
+  if(e.source!==window||!e.data||e.data.source!=='QT_EXTENSION')return;
+  const msg=e.data;
+  if(msg.type==='TAP_STUDENT')pcTapStudent(msg.id);
+  if(msg.type==='MARK_ABSENT')markAbsent(msg.id);
+  if(msg.type==='MARK_PRESENT')markPresent(msg.id);
+  if(msg.type==='AWARD_XP')awardChallengeXP();
+});
 
 function renderParticipationSetup(){
   const el=document.getElementById('cp-pc');if(!el)return;
@@ -2734,7 +2776,7 @@ function startChallenge(){
 }
 
 function renderChallengeGrid(){
-  const list=filt(pcState.cls);
+  const list=getPCList();
   const grid=document.getElementById('pc-grid');if(!grid)return;
   grid.innerHTML=list.map(s=>{
     const isAbsent=pcState.absent.has(s.id);
@@ -2743,15 +2785,15 @@ function renderChallengeGrid(){
     const dots=isAbsent?''
       :Array.from({length:pcState.needed},(_,i)=>`<div class="pc-dot${i<count?' filled':''}"></div>`).join('');
     return`<div class="pc-card${done?' done':isAbsent?' absent':''}"
-      onclick="${isAbsent?'':''}"
+      onclick="${isAbsent?`markPresent('${s.id}')`:`tapStudent('${s.id}')`}" 
       style="position:relative;">
-      <div class="pc-name" onclick="${isAbsent?`markPresent('${s.id}')`:`tapStudent('${s.id}')`}">${s.name.split(' ')[0]}</div>
+      <div class="pc-name">${s.name.split(' ')[0]}</div>
       ${isAbsent
         ?`<div style="font-size:11px;color:#888;margin:4px 0;">Absent</div>
-           <button onclick="markPresent('${s.id}')" style="font-size:10px;padding:2px 8px;border:1px solid #CCC;border-radius:4px;background:var(--W);cursor:pointer;color:#666;">Mark present</button>`
-        :`<div class="pc-tally" onclick="tapStudent('${s.id}')">${count}/${pcState.needed}</div>
-          <div class="pc-dots" onclick="tapStudent('${s.id}')">${dots}</div>
-          <button onclick="markAbsent('${s.id}')" style="font-size:10px;padding:1px 7px;border:1px solid #CCC;border-radius:4px;background:transparent;cursor:pointer;color:#888;margin-top:4px;" data-tip="Mark absent — removes from challenge">🏠</button>`
+           <button onclick="event.stopPropagation();markPresent('${s.id}')" style="font-size:10px;padding:2px 8px;border:1px solid #CCC;border-radius:4px;background:var(--W);cursor:pointer;color:#666;">Mark present</button>`
+        :`<div class="pc-tally">${count}/${pcState.needed}</div>
+          <div class="pc-dots">${dots}</div>
+          <button onclick="event.stopPropagation();markAbsent('${s.id}')" style="font-size:10px;padding:1px 7px;border:1px solid #CCC;border-radius:4px;background:transparent;cursor:pointer;color:#888;margin-top:4px;" data-tip="Mark absent — removes from challenge">🏠 Absent</button>`
       }
     </div>`;
   }).join('');
@@ -2761,69 +2803,41 @@ function renderChallengeGrid(){
 
 function markAbsent(id){
   if(!pcState.active)return;
-  // Refund any XP already awarded to this student this challenge
-  const count=pcState.tally[id]||0;
-  if(count>0){
-    const s=students.find(x=>x.id===id);
-    if(s){
-      const awarded=Math.round(pcState.xp/pcState.needed)*count;
-      s.xp=Math.max(0,s.xp-awarded);s.te=Math.max(0,s.te-awarded);s.lv=lvFromXP(s.xp);
-      for(let i=0;i<count;i++){if(s.hist&&s.hist.length)s.hist.shift();}
-      save();
-    }
-  }
   pcState.tally[id]=0;
   pcState.absent.add(id);
-  syncPCState();
   renderChallengeGrid();
+  syncPCState();
+  if(window._qpPaint)window._qpPaint();
+  checkPCComplete();
 }
 
 function markPresent(id){
+  if(!pcState.active)return;
   pcState.absent.delete(id);
-  syncPCState();
+  if(pcState.tally[id]===undefined)pcState.tally[id]=0;
   renderChallengeGrid();
+  syncPCState();
+  if(window._qpPaint)window._qpPaint();
+  checkPCComplete();
 }
 
-function tapStudent(id){
-  if(!pcState.active)return;
-  const count=pcState.tally[id]||0;
-  if(count>=pcState.needed){
-    // Undo last tap — just decrement counter, no XP change
-    pcState.tally[id]=Math.max(0,count-1);
-  } else {
-    pcState.tally[id]=count+1;
-    // No XP awarded yet — XP only given when challenge fully completes
-  }
-  renderChallengeGrid();
-  // Check completion — only count present students
-  const list=filt(pcState.cls);
-  const present=list.filter(s=>!pcState.absent.has(s.id));
-  const allDone=present.length>0&&present.every(s=>(pcState.tally[s.id]||0)>=pcState.needed);
-  if(allDone&&!pcState.awarded){
-    document.getElementById('pc-complete').style.display='block';
-    const msg=pcState.prize
-      ?`Every student participated! Class prize: ${pcState.prize}`
-      :`Every student participated ${pcState.needed} time${pcState.needed!==1?'s':''}! Outstanding!`;
-    document.getElementById('pc-complete-msg').textContent=msg;
-    spawnConfetti();
-  }
-}
+function tapStudent(id){pcTapStudent(id);}
 
 function updateMeter(list){
   // Exclude absent students from the meter count
-  const present=list.filter(s=>!pcState.absent.has(s.id));
-  const total=present.length;if(!total)return;
+  const present=getPCPresent(list);
+  const total=present.length;
   const done=present.filter(s=>(pcState.tally[s.id]||0)>=pcState.needed).length;
-  const pct=Math.round((done/total)*100);
+  const pct=total?Math.round((done/total)*100):0;
   document.getElementById('pc-meter').style.width=pct+'%';
-  const absentCount=pcState.absent.size;
+  const absentCount=(list||[]).filter(s=>pcState.absent.has(s.id)).length;
   document.getElementById('pc-progress-text').textContent=
     `${done} of ${total} present students completed${absentCount?` · ${absentCount} absent`:''}`;
   document.getElementById('pc-pct-text').textContent=pct+'%';
 }
 
 function awardChallengeXP(){
-  const list=filt(pcState.cls).filter(s=>!pcState.absent.has(s.id));
+  const list=getPCPresent(getPCList());
   const xpEach=pcState.xp;
   const now=new Date();
   const dateStr=now.toLocaleDateString();
@@ -2841,14 +2855,14 @@ function awardChallengeXP(){
   });
   pcState.awarded=true;
   addLog(`Class challenge complete — ${xpEach} XP awarded to ${list.length} present students`,'event');
-  save();render();
+  save();render();syncPCState();
   showEB(`🎉 Challenge complete! ${xpEach} XP awarded to ${list.length} students!`);
   setTimeout(resetChallenge,2000);
 }
 
 function resetChallenge(){
   if(pcState.timerInterval)clearInterval(pcState.timerInterval);
-  pcState.active=false;pcState.tally={};
+  pcState.active=false;pcState.tally={};pcState.absent=new Set();pcState.awarded=false;
   syncPCState();
   document.getElementById('pc-setup').style.display='block';
   document.getElementById('pc-active').style.display='none';
@@ -3098,11 +3112,13 @@ function openQuickParticipation(){
 
   // Render students
   function qpPaint(){
+    const meter=document.getElementById('qpf-meter'),footer=document.getElementById('qpf-footer');
+    if(!meter||!footer){window._qpPaint=null;return;}
     const present=filt(pcState.cls).filter(s=>!pcState.absent.has(s.id));
     const done=present.filter(s=>(pcState.tally[s.id]||0)>=pcState.needed).length;
     const pct=present.length?Math.round(done/present.length*100):0;
-    document.getElementById('qpf-meter').style.width=pct+'%';
-    document.getElementById('qpf-footer').textContent=done+' of '+present.length+' completed';
+    meter.style.width=pct+'%';
+    footer.textContent=done+' of '+present.length+' completed';
     grid.innerHTML=present.map(s=>{
       const count=pcState.tally[s.id]||0;
       const isDone=count>=pcState.needed;
@@ -3113,20 +3129,7 @@ function openQuickParticipation(){
     }).join('');
   }
 
-  window.qpTap=function(id){
-    const count=pcState.tally[id]||0;
-    if(count>=pcState.needed)pcState.tally[id]=Math.max(0,count-1);
-    else pcState.tally[id]=count+1;
-    qpPaint();renderChallengeGrid();
-    // Check completion
-    const present=filt(pcState.cls).filter(s=>!pcState.absent.has(s.id));
-    if(present.every(s=>(pcState.tally[s.id]||0)>=pcState.needed)&&!pcState.awarded){
-      document.getElementById('pc-complete').style.display='block';
-      document.getElementById('pc-complete-msg').textContent=pcState.prize?`Every student participated! Class prize: ${pcState.prize}`:'Every student participated!';
-      spawnConfetti();
-      if(window.qpShowComplete)qpShowComplete();
-    }
-  };
+  // qpTap is defined globally in the main challenge code; the quick window uses that shared function.
 
   // Keep overlay in sync with main challenge state
   window._qpPaint=qpPaint;
@@ -3240,6 +3243,11 @@ function buildExtZip(){
 
   const BACKGROUND=`chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:true}).catch(()=>{});
 chrome.action.onClicked.addListener(async(tab)=>{await chrome.sidePanel.open({tabId:tab.id});});
+function sendToTracker(payload){
+  chrome.tabs.query({url:'https://dutcher1998.github.io/QuestTracker*'},tabs=>{
+    tabs.forEach(t=>chrome.tabs.sendMessage(t.id,payload).catch(()=>{}));
+  });
+}
 chrome.runtime.onMessage.addListener((msg,sender)=>{
   if(msg.type==='STATE_UPDATE'){
     // Store in chrome.storage.local so side panel can read it anytime, even if it opens later
@@ -3247,8 +3255,10 @@ chrome.runtime.onMessage.addListener((msg,sender)=>{
     // Also broadcast to any currently-open side panel
     chrome.runtime.sendMessage({type:'STATE_UPDATE',payload:msg.payload}).catch(()=>{});
   }
-  if(msg.type==='TAP_STUDENT'){chrome.tabs.query({url:'https://dutcher1998.github.io/QuestTracker*'},tabs=>{tabs.forEach(t=>chrome.tabs.sendMessage(t.id,{type:'TAP_STUDENT',id:msg.id}).catch(()=>{}));});}
-  if(msg.type==='AWARD_XP'){chrome.tabs.query({url:'https://dutcher1998.github.io/QuestTracker*'},tabs=>{tabs.forEach(t=>chrome.tabs.sendMessage(t.id,{type:'AWARD_XP'}).catch(()=>{}));});}
+  if(msg.type==='TAP_STUDENT')sendToTracker({type:'TAP_STUDENT',id:msg.id});
+  if(msg.type==='MARK_ABSENT')sendToTracker({type:'MARK_ABSENT',id:msg.id});
+  if(msg.type==='MARK_PRESENT')sendToTracker({type:'MARK_PRESENT',id:msg.id});
+  if(msg.type==='AWARD_XP')sendToTracker({type:'AWARD_XP'});
   return false;
 });`;
 
@@ -3266,9 +3276,17 @@ function pollState(){
     chrome.runtime.sendMessage({type:'STATE_UPDATE',payload:data}).catch(()=>{});
   }catch(e){}
 }
-function tapInPage(id){const s=document.createElement('script');s.textContent='if(typeof window.qpTap==="function")window.qpTap("'+id+'");';document.documentElement.appendChild(s);s.remove();setTimeout(pollState,150);}
-function awardInPage(){const s=document.createElement('script');s.textContent='if(typeof window.awardChallengeXP==="function")window.awardChallengeXP();';document.documentElement.appendChild(s);s.remove();}
-chrome.runtime.onMessage.addListener((msg)=>{if(msg.type==='TAP_STUDENT')tapInPage(msg.id);if(msg.type==='AWARD_XP')awardInPage();});
+function sendToPage(type,id){
+  window.postMessage({source:'QT_EXTENSION',type:type,id:id},'*');
+  setTimeout(pollState,120);
+  setTimeout(pollState,400);
+}
+chrome.runtime.onMessage.addListener((msg)=>{
+  if(msg.type==='TAP_STUDENT')sendToPage('TAP_STUDENT',msg.id);
+  if(msg.type==='MARK_ABSENT')sendToPage('MARK_ABSENT',msg.id);
+  if(msg.type==='MARK_PRESENT')sendToPage('MARK_PRESENT',msg.id);
+  if(msg.type==='AWARD_XP')sendToPage('AWARD_XP');
+});
 // Poll frequently so storage is always fresh
 setInterval(pollState,400);
 setTimeout(pollState,500);
@@ -3288,10 +3306,23 @@ function loadState(){
 chrome.runtime.onMessage.addListener(function(msg){
   if(msg.type==='STATE_UPDATE'){state=msg.payload;lastStateStr=JSON.stringify(state);spRender();}
 });
+function updateLocalStudent(id,changes){
+  const s=(state&&state.students||[]).find(function(x){return x.id===id;});
+  if(!s)return;
+  Object.keys(changes).forEach(function(k){s[k]=changes[k];});
+}
 function tap(id){
   const s=(state&&state.students||[]).find(function(x){return x.id===id;});
-  if(s){if(s.count>=state.needed)s.count=Math.max(0,s.count-1);else s.count++;s.done=s.count>=state.needed;spRender();}
+  if(s&&!s.absent){if(s.count>=state.needed)s.count=Math.max(0,s.count-1);else s.count++;s.done=s.count>=state.needed;spRender();}
   chrome.runtime.sendMessage({type:'TAP_STUDENT',id:id}).catch(function(){});
+}
+function markAbsent(id){
+  updateLocalStudent(id,{absent:true,count:0,done:false});spRender();
+  chrome.runtime.sendMessage({type:'MARK_ABSENT',id:id}).catch(function(){});
+}
+function markPresent(id){
+  updateLocalStudent(id,{absent:false,count:0,done:false});spRender();
+  chrome.runtime.sendMessage({type:'MARK_PRESENT',id:id}).catch(function(){});
 }
 function spRender(){
   const idle=document.getElementById('idle'),grid=document.getElementById('grid'),
@@ -3301,13 +3332,22 @@ function spRender(){
   }
   idle.style.display='none';grid.style.display='grid';status.style.display='block';
   document.getElementById('cls').textContent=state.cls==='All Classes'?'Class Challenge':state.cls+' Challenge';
-  const done=state.students.filter(function(s){return s.done;}).length;
-  const pct=state.students.length?Math.round(done/state.students.length*100):0;
+  const present=state.students.filter(function(s){return !s.absent;});
+  const done=present.filter(function(s){return s.done;}).length;
+  const absent=state.students.length-present.length;
+  const pct=present.length?Math.round(done/present.length*100):0;
   document.getElementById('mfill').style.width=pct+'%';
-  document.getElementById('mlabel').textContent=done+' of '+state.students.length+' completed';
-  grid.innerHTML=state.students.map(function(s){return'<div class="card'+(s.done?' done':'')+'" data-id="'+s.id+'"><div class="name">'+s.name+'</div><div class="tally">'+s.count+'/'+state.needed+'</div></div>';}).join('');
-  grid.querySelectorAll('.card').forEach(function(c){c.addEventListener('click',function(){tap(c.dataset.id);});});
-  if(done===state.students.length&&state.students.length>0&&!state.awarded){
+  document.getElementById('mlabel').textContent=done+' of '+present.length+' present completed'+(absent?' · '+absent+' absent':'');
+  grid.innerHTML=state.students.map(function(s){
+    const cls='card'+(s.done?' done':'')+(s.absent?' absent':'');
+    const btn=s.absent?'<button class="absbtn present" data-action="present" data-id="'+s.id+'">Mark present</button>':'<button class="absbtn" data-action="absent" data-id="'+s.id+'">🏠 Absent</button>';
+    const tally=s.absent?'<div class="abslabel">Absent</div>':'<div class="tally">'+s.count+'/'+state.needed+'</div>';
+    return'<div class="'+cls+'" data-id="'+s.id+'"><div class="name">'+s.name+'</div>'+tally+btn+'</div>';
+  }).join('');
+  grid.querySelectorAll('.card').forEach(function(c){c.addEventListener('click',function(e){if(e.target.closest('button'))return;if(!c.classList.contains('absent'))tap(c.dataset.id);});});
+  grid.querySelectorAll('[data-action="absent"]').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();markAbsent(b.dataset.id);});});
+  grid.querySelectorAll('[data-action="present"]').forEach(function(b){b.addEventListener('click',function(e){e.stopPropagation();markPresent(b.dataset.id);});});
+  if(done===present.length&&present.length>0&&!state.awarded){
     comp.style.display='block';document.getElementById('prize').textContent=state.prize?'🎁 '+state.prize:'';
   }else{comp.style.display='none';}
 }
@@ -3335,9 +3375,9 @@ setTimeout(loadState,1000);`;
 #mlabel{font-size:11px;color:rgba(255,255,255,.4);text-align:center;}
 #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;padding:8px 10px;overflow-y:auto;flex:1;display:none;}
 .card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:8px 4px;text-align:center;cursor:pointer;transition:all .15s;}
-.card:hover{background:rgba(255,255,255,.18);}.card.done{background:#1A6B2A;border-color:#2A8B3A;}
+.card:hover{background:rgba(255,255,255,.18);}.card.done{background:#1A6B2A;border-color:#2A8B3A;}.card.absent{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12);opacity:.55;}
 .name{font-size:12px;font-weight:bold;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.tally{font-size:18px;color:#E8C97A;}
+.tally{font-size:18px;color:#E8C97A;}.abslabel{font-size:14px;color:rgba(255,255,255,.55);margin:4px 0;}.absbtn{margin-top:4px;font-size:10px;padding:2px 5px;border:1px solid rgba(255,255,255,.22);border-radius:5px;background:transparent;color:rgba(255,255,255,.6);cursor:pointer;}.absbtn:hover{background:rgba(255,255,255,.12);color:white;}.absbtn.present{color:#E8C97A;border-color:#C9923A;}
 #idle{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;}
 #idle .ic{font-size:40px;margin-bottom:12px;}#idle h2{font-size:15px;color:#E8C97A;margin-bottom:8px;}
 #idle p{font-size:12px;color:rgba(255,255,255,.5);line-height:1.6;}#idle a{color:#C9923A;}
