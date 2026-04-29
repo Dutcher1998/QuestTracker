@@ -706,7 +706,7 @@ html,body{scroll-behavior:auto;}
             <button class="btn bg bsm" onclick="openAddGP()">+ Save period</button>
             <button class="btn bo bsm" onclick="manualFetchGP()">↻ From Classroom</button>
             <button class="btn bd bxs" onclick="deleteGP()">Remove</button>
-            <button class="btn bm" onclick="syncAssignments()">🔄 Sync Assignments</button>
+            <button class="btn bm" onclick="syncAssignments(true)">🔄 Sync Assignments</button>
             <button class="btn bo bsm" onclick="clearAwardedIds()">Clear history</button>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px;">
@@ -849,6 +849,8 @@ html,body{scroll-behavior:auto;}
         <button class="btn bm" onclick="downloadExtension()">⬇️ Download &amp; Install Guide</button>
         <div style="font-size:12px;color:var(--INK3);margin-top:8px;">Requires Chrome 114 or newer. Generates the extension file directly — no external hosting needed.</div>
       </div>
+      <div class="aws">
+        <h3>Season reset</h3>
         <div class="reset-warn">⚠️ This will reset all student XP to zero and levels to 1. Students keep custom badges and the Legend badge (if earned). Each student receives a tiered season badge based on their final rank. Cannot be undone.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn bd" onclick="seasonReset()">Reset Season</button>
@@ -1395,6 +1397,23 @@ function renderLB(){
     </div>`;
   }).join('');
 }
+function safeTip(str){
+  return String(str||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function miniBadgeHTML(st,limit){
+  const allBadges=getAllBadges();
+  const regular=(st.badges||[]).slice(-(limit||4)).map(bid=>{
+    const b=allBadges.find(x=>x.id===bid);if(!b)return'';
+    return`<span class="badge-tip" data-tip="${safeTip(b.label+': '+b.desc)}" style="margin-left:3px;font-size:13px;line-height:1;">${b.icon}</span>`;
+  }).join('');
+  const season=Object.entries(st.seasonBadges||{}).filter(([,count])=>count>0).map(([id,count])=>{
+    const b=allBadges.find(x=>x.id===id);if(!b)return'';
+    const reward=seasonRewards[id]?` — Reward: ${seasonRewards[id]}`:'';
+    return`<span class="badge-tip" data-tip="${safeTip(b.label+(count>1?' ×'+count:'')+reward)}" style="margin-left:3px;font-size:13px;line-height:1;">${b.icon}${count>1?'<sup style="font-size:9px;">×'+count+'</sup>':''}</span>`;
+  }).join('');
+  return regular+season;
+}
+
 function renderCVC(){
   const cls=getCls();
   const totals=cls.map(c=>{
@@ -2003,7 +2022,7 @@ function renderSV(){
 
   const rk=getRank(s.lv);const p=pct(s);
   const rf=rankFilter(s.lv);
-  const sorted=[...students].sort((a,b)=>b.lv-a.lv);
+  const sorted=[...students].sort((a,b)=>b.xp-a.xp);
   const sp=[...privs].sort((a,b)=>a.level-b.level);
   const allBadges=getAllBadges();
   const eb=allBadges.filter(b=>s.badges.includes(b.id)&&!b.id.startsWith('sv_'));
@@ -2064,10 +2083,10 @@ function renderSV(){
       }).join('')}
     </div>`:''}
     <div class="ss"><h2>🏆 Class Leaderboard</h2>
-      ${sorted.map((st,i)=>{const r=getRank(st.lv);const me=st.id==s.id;const md=['🥇','🥈','🥉'];
+      ${sorted.map((st,i)=>{const r=getRank(st.lv);const me=st.id==s.id;const md=['🥇','🥈','🥉'];const badgeHtml=miniBadgeHTML(st,5);
         return`<div class="slr${me?' me':''}">
           <span class="slp">${i<3?md[i]:i+1}</span>${avHTML(st,24)}
-          <span class="sln">${me?'<strong>'+st.name+' (you)</strong>':st.name}</span>
+          <span class="sln">${me?'<strong>'+st.name+' (you)</strong>':st.name}${badgeHtml?` <span style="white-space:nowrap;">${badgeHtml}</span>`:''}</span>
           <span class="slv" style="color:${r.color};">${r.icon} Lv ${st.lv}</span>
         </div>`;}).join('')}
     </div>
@@ -2345,11 +2364,15 @@ function syncGC(){
   openSyncPicker();
 }
 function reqGCToken(){
-  if(!tclient){tclient=google.accounts.oauth2.initTokenClient({
+  if(typeof google==='undefined'){
+    loadGS(()=>reqGCToken());
+    return;
+  }
+  tclient=google.accounts.oauth2.initTokenClient({
     client_id:GCL_ID,
     scope:'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.rosters.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly https://www.googleapis.com/auth/classroom.student-submissions.students.readonly',
     callback:(resp)=>{if(resp.error){showEB('Auth failed: '+resp.error);return;}gcToken=resp.access_token;openSyncPicker();}
-  });}
+  });
   tclient.requestAccessToken();
 }
 
@@ -3838,18 +3861,21 @@ function toggleSyncClass(c){
 }
 
 function manualFetchGP(){
+  if(typeof google==='undefined'){
+    loadGS(()=>manualFetchGP());
+    return;
+  }
   if(!gcToken){
-    if(!tclient){
-      tclient=google.accounts.oauth2.initTokenClient({
-        client_id:GCL_ID,
-        scope:'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.rosters.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly https://www.googleapis.com/auth/classroom.student-submissions.students.readonly',
-        callback:(resp)=>{
-          if(resp.error){showEB('Could not authorize. Try syncing Google Classroom first.');return;}
-          gcToken=resp.access_token;
-          tryFetchGradingPeriods();
-        }
-      });
-    }
+    tclient=google.accounts.oauth2.initTokenClient({
+      client_id:GCL_ID,
+      scope:'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.rosters.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly https://www.googleapis.com/auth/classroom.student-submissions.students.readonly',
+      callback:(resp)=>{
+        if(resp.error){showEB('Could not authorize. Try syncing Google Classroom first.');return;}
+        gcToken=resp.access_token;
+        showEB('Fetching grading periods from Google Classroom...');
+        tryFetchGradingPeriods();
+      }
+    });
     tclient.requestAccessToken();
     return;
   }
@@ -4303,7 +4329,7 @@ function openAddGP(){
   savePeriods();
   const sel=document.getElementById('gp-select');
   sel.value=String(savedPeriods.length-1);
-  showEB('Saved +name+ as a marking period.');
+  showEB('Saved '+name+' as a marking period.');
 }
 function deleteGP(){
   const sel=document.getElementById('gp-select');
@@ -4315,27 +4341,29 @@ function deleteGP(){
   savedPeriods.splice(idx,1);
   savePeriods();
   sel.value='all';onGPSelect();
-  showEB('Removed +name+.');
+  showEB('Removed '+name+'.');
 }
 
 
-function syncAssignments(){
-  // Always request a fresh token to avoid "no active courses" from stale tokens
+function syncAssignments(forceAuth){
   const scope='https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.rosters.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly https://www.googleapis.com/auth/classroom.student-submissions.students.readonly';
-  if(!tclient){
-    tclient=google.accounts.oauth2.initTokenClient({
-      client_id:GCL_ID,scope,
-      callback:(resp)=>{
-        if(resp.error){showEB('Auth failed: '+resp.error);return;}
-        gcToken=resp.access_token;
-        runSync();
-      }
-    });
+  if(typeof google==='undefined'){
+    loadGS(()=>syncAssignments(forceAuth));
+    return;
   }
-  if(!gcToken){
-    tclient.requestAccessToken();return;
+  // Always rebuild the token client here so this button cannot accidentally reuse the roster-sync callback.
+  tclient=google.accounts.oauth2.initTokenClient({
+    client_id:GCL_ID,scope,
+    callback:(resp)=>{
+      if(resp.error){showEB('Auth failed: '+resp.error);setAssignStatus('Authorization failed. Try again from the Assignments tab.','#8B1A1A');return;}
+      gcToken=resp.access_token;
+      runSync();
+    }
+  });
+  if(!gcToken||forceAuth){
+    tclient.requestAccessToken({prompt:gcToken?'':'consent'});
+    return;
   }
-  // Try with existing token first, fall back to refresh on 401
   runSync();
 }
 
@@ -4456,13 +4484,16 @@ function runSync(){
     const fetchAllWork=(courseId,pageToken='')=>{
       const url=`https://classroom.googleapis.com/v1/courses/${courseId}/courseWork?pageSize=100${pageToken?'&pageToken='+pageToken:''}`;
       return fetch(url,{headers:{Authorization:'Bearer '+gcToken}})
-      .then(r=>r.json())
+      .then(r=>{
+        if(!r.ok){addAssignLog(`Could not read assignments for course ${courseId} — HTTP ${r.status}.`,'error');return {courseWork:[]};}
+        return r.json();
+      })
       .then(cw=>{
         const work=cw.courseWork||[];
         if(cw.nextPageToken)return fetchAllWork(courseId,cw.nextPageToken).then(more=>work.concat(more));
         return work;
       })
-      .catch(()=>[]);
+      .catch(e=>{addAssignLog(`Assignment fetch error for course ${courseId}: ${e.message||e}`,'error');return[];});
     };
 
     return Promise.all(coursesToSync.map(course=>
@@ -4472,6 +4503,23 @@ function runSync(){
   .then(courseWorkList=>{
     const submissionPromises=[];
     let totalWork=0;let filteredWork=0;
+    const fetchAllSubmissions=(course,cw,pageToken='')=>{
+      const url=`https://classroom.googleapis.com/v1/courses/${course.id}/courseWork/${cw.id}/studentSubmissions?pageSize=150${pageToken?'&pageToken='+pageToken:''}`;
+      return fetch(url,{headers:{Authorization:'Bearer '+gcToken}})
+      .then(r=>{
+        if(!r.ok){
+          addAssignLog(`Could not read submissions for "${cw.title}" (${course.name}) — HTTP ${r.status}. Check Classroom permissions/scopes.`,'error');
+          return {studentSubmissions:[]};
+        }
+        return r.json();
+      })
+      .then(d=>{
+        const subs=d.studentSubmissions||[];
+        if(d.nextPageToken)return fetchAllSubmissions(course,cw,d.nextPageToken).then(more=>subs.concat(more));
+        return subs;
+      })
+      .catch(e=>{addAssignLog(`Submission fetch error for "${cw.title}": ${e.message||e}`,'error');return[];});
+    };
     courseWorkList.forEach(({course,work})=>{
       work.forEach(cw=>{
         totalWork++;
@@ -4486,12 +4534,7 @@ function runSync(){
           }
         }
         filteredWork++;
-        submissionPromises.push(
-          fetch(`https://classroom.googleapis.com/v1/courses/${course.id}/courseWork/${cw.id}/studentSubmissions?pageSize=150`,{headers:{Authorization:'Bearer '+gcToken}})
-          .then(r=>r.json())
-          .then(d=>({course,cw,submissions:d.studentSubmissions||[]}))
-          .catch(()=>({course,cw,submissions:[]}))
-        );
+        submissionPromises.push(fetchAllSubmissions(course,cw).then(submissions=>({course,cw,submissions})));
       });
     });
     addAssignLog(`${filteredWork} assignments in marking period (${totalWork} total, ${totalWork-filteredWork} filtered out).`,'info');
@@ -4499,6 +4542,8 @@ function runSync(){
   })
   .then(results=>{
     let totalAwarded=0;let totalXP=0;
+    const subCount=results.reduce((n,r)=>n+(r.submissions?r.submissions.length:0),0);
+    addAssignLog(`Read ${subCount} student submission record${subCount!==1?'s':''}.`,'info');
 
     // Log unique category names found for debugging
     const foundCats=new Set(results.map(r=>r.cw.gradeCategory?.name||r.cw.workType||'(none)'));
@@ -4527,17 +4572,16 @@ function runSync(){
 
         if(!isTurnedIn)return; // Not submitted — skip silently
 
-        const submissionKey=sub.id;
+        const submissionKey=`${course.id}:${cw.id}:${sub.userId}`;
         const prevStatus=awardedSubmissions[submissionKey];
 
         // true = fully awarded, skip entirely
         // 'zero' = was graded zero, re-check in case grade was corrected
         // 'flagged' = previously unflaggable (no student/category), re-check
         // undefined = never processed
-        if(prevStatus===true)return;
-
         const s=students.find(x=>x.gid===sub.userId);
-        const rawGrade=sub.assignedGrade;
+        // assignedGrade is usually available after grades are returned; draftGrade is what teachers often see right after grading.
+        const rawGrade=(sub.assignedGrade!==undefined&&sub.assignedGrade!==null)?sub.assignedGrade:sub.draftGrade;
         const hasGrade=rawGrade!==undefined&&rawGrade!==null&&rawGrade!=='';
         const grade=hasGrade?parseFloat(rawGrade):null;
         const maxPoints=parseFloat(cw.maxPoints)||100;
@@ -4582,7 +4626,7 @@ function runSync(){
 
         // Calculate delta — what has already been awarded for this submission
         // We track awarded XP per submission to calculate top-ups
-        const prevAwarded=awardedSubmissions[submissionKey+'_xp']||0;
+        const prevAwarded=Number(awardedSubmissions[submissionKey+'_xp']||0);
         const delta=xpToAward-prevAwarded;
 
         if(delta<=0){
@@ -4598,7 +4642,7 @@ function runSync(){
         const now=new Date();
         const dateStr=now.toLocaleDateString();const timeStr=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
         const isTopUp=prevAwarded>0;
-        s.hist.unshift({amt:delta,reason:`${cw.title} (${isTopUp?'grade updated — ':''+(reasons.join(', '))})`,time:timeStr,date:dateStr});
+        s.hist.unshift({amt:delta,reason:`${cw.title} (${isTopUp?'grade updated — '+reasons.join(', '):reasons.join(', ')})`,time:timeStr,date:dateStr});
         if(s.hist.length>200)s.hist.pop();
         chkBadges(s);
 
