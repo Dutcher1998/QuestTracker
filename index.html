@@ -3241,25 +3241,57 @@ function buildExtZip(){
   const BACKGROUND=`chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:true}).catch(()=>{});
 chrome.action.onClicked.addListener(async(tab)=>{await chrome.sidePanel.open({tabId:tab.id});});
 chrome.runtime.onMessage.addListener((msg,sender)=>{
-  if(msg.type==='STATE_UPDATE'){chrome.runtime.sendMessage({type:'STATE_UPDATE',payload:msg.payload}).catch(()=>{});}
+  if(msg.type==='STATE_UPDATE'){
+    // Store in chrome.storage.local so side panel can read it anytime, even if it opens later
+    chrome.storage.local.set({qp_state:msg.payload}).catch(()=>{});
+    // Also broadcast to any currently-open side panel
+    chrome.runtime.sendMessage({type:'STATE_UPDATE',payload:msg.payload}).catch(()=>{});
+  }
   if(msg.type==='TAP_STUDENT'){chrome.tabs.query({url:'https://dutcher1998.github.io/QuestTracker*'},tabs=>{tabs.forEach(t=>chrome.tabs.sendMessage(t.id,{type:'TAP_STUDENT',id:msg.id}).catch(()=>{}));});}
   if(msg.type==='AWARD_XP'){chrome.tabs.query({url:'https://dutcher1998.github.io/QuestTracker*'},tabs=>{tabs.forEach(t=>chrome.tabs.sendMessage(t.id,{type:'AWARD_XP'}).catch(()=>{}));});}
   return false;
 });`;
 
   const CONTENT=`let lastHash='';
-function pollState(){try{const raw=localStorage.getItem('dq_qp_data');if(!raw||raw===lastHash)return;lastHash=raw;const data=JSON.parse(raw);chrome.runtime.sendMessage({type:'STATE_UPDATE',payload:data}).catch(()=>{});}catch(e){}}
+function pollState(){
+  try{
+    const raw=localStorage.getItem('dq_qp_data');
+    if(!raw)return;
+    if(raw===lastHash)return;
+    lastHash=raw;
+    const data=JSON.parse(raw);
+    // Write to chrome.storage.local — this persists and the side panel reads it on open
+    chrome.storage.local.set({qp_state:data}).catch(()=>{});
+    // Also send a message for immediate update if side panel is already open
+    chrome.runtime.sendMessage({type:'STATE_UPDATE',payload:data}).catch(()=>{});
+  }catch(e){}
+}
 function tapInPage(id){const s=document.createElement('script');s.textContent='if(typeof window.qpTap==="function")window.qpTap("'+id+'");';document.documentElement.appendChild(s);s.remove();setTimeout(pollState,150);}
 function awardInPage(){const s=document.createElement('script');s.textContent='if(typeof window.awardChallengeXP==="function")window.awardChallengeXP();';document.documentElement.appendChild(s);s.remove();}
 chrome.runtime.onMessage.addListener((msg)=>{if(msg.type==='TAP_STUDENT')tapInPage(msg.id);if(msg.type==='AWARD_XP')awardInPage();});
-setInterval(pollState,500);setTimeout(pollState,800);`;
+// Poll frequently so storage is always fresh
+setInterval(pollState,400);
+setTimeout(pollState,500);
+setTimeout(pollState,1500);`;
 
-  const SIDEPANEL_JS=`let state=null;
-chrome.runtime.onMessage.addListener((msg)=>{if(msg.type==='STATE_UPDATE'){state=msg.payload;spRender();}});
+  const SIDEPANEL_JS=`let state=null;let lastStateStr='';
+// Load state immediately on open — this is the primary mechanism
+function loadState(){
+  chrome.storage.local.get(['qp_state'],function(r){
+    if(r&&r.qp_state){
+      const str=JSON.stringify(r.qp_state);
+      if(str!==lastStateStr){lastStateStr=str;state=r.qp_state;spRender();}
+    }
+  });
+}
+// Also listen for live updates
+chrome.runtime.onMessage.addListener(function(msg){
+  if(msg.type==='STATE_UPDATE'){state=msg.payload;lastStateStr=JSON.stringify(state);spRender();}
+});
 function tap(id){
-  const s=(state&&state.students||[]).find(x=>x.id===id);
-  if(s){if(s.count>=state.needed)s.count=Math.max(0,s.count-1);else s.count++;s.done=s.count>=state.needed;render();}
-  chrome.runtime.sendMessage({type:'TAP_STUDENT',id}).catch(()=>{});
+  const s=(state&&state.students||[]).find(function(x){return x.id===id;});
+  if(s){if(s.count>=state.needed)s.count=Math.max(0,s.count-1);else s.count++;s.done=s.count>=state.needed;spRender();}
+  chrome.runtime.sendMessage({type:'TAP_STUDENT',id:id}).catch(function(){});
 }
 function spRender(){
   const idle=document.getElementById('idle'),grid=document.getElementById('grid'),
@@ -3269,24 +3301,30 @@ function spRender(){
   }
   idle.style.display='none';grid.style.display='grid';status.style.display='block';
   document.getElementById('cls').textContent=state.cls==='All Classes'?'Class Challenge':state.cls+' Challenge';
-  const done=state.students.filter(s=>s.done).length,pct=state.students.length?Math.round(done/state.students.length*100):0;
+  const done=state.students.filter(function(s){return s.done;}).length;
+  const pct=state.students.length?Math.round(done/state.students.length*100):0;
   document.getElementById('mfill').style.width=pct+'%';
   document.getElementById('mlabel').textContent=done+' of '+state.students.length+' completed';
-  grid.innerHTML=state.students.map(s=>'<div class="card'+(s.done?' done':'')+'" data-id="'+s.id+'"><div class="name">'+s.name+'</div><div class="tally">'+s.count+'/'+state.needed+'</div></div>').join('');
-  grid.querySelectorAll('.card').forEach(c=>c.addEventListener('click',()=>tap(c.dataset.id)));
+  grid.innerHTML=state.students.map(function(s){return'<div class="card'+(s.done?' done':'')+'" data-id="'+s.id+'"><div class="name">'+s.name+'</div><div class="tally">'+s.count+'/'+state.needed+'</div></div>';}).join('');
+  grid.querySelectorAll('.card').forEach(function(c){c.addEventListener('click',function(){tap(c.dataset.id);});});
   if(done===state.students.length&&state.students.length>0&&!state.awarded){
     comp.style.display='block';document.getElementById('prize').textContent=state.prize?'🎁 '+state.prize:'';
   }else{comp.style.display='none';}
 }
-document.getElementById('award').addEventListener('click',()=>{
-  chrome.tabs.query({url:'https://dutcher1998.github.io/QuestTracker*'},tabs=>{
-    if(!tabs.length){alert('Quest Tracker tab not found.');return;}
-    chrome.tabs.sendMessage(tabs[0].id,{type:'AWARD_XP'}).catch(()=>{});
-    if(state)state.awarded=true;spRender();
+document.getElementById('award').addEventListener('click',function(){
+  chrome.tabs.query({url:'https://dutcher1998.github.io/QuestTracker*'},function(tabs){
+    if(!tabs.length){alert('Quest Tracker tab not found. Make sure Quest Tracker is open.');return;}
+    chrome.tabs.sendMessage(tabs[0].id,{type:'AWARD_XP'}).catch(function(){});
+    if(state){state.awarded=true;chrome.storage.local.set({qp_state:state});}
+    spRender();
   });
 });
-setInterval(()=>{chrome.storage&&chrome.storage.local.get(['qp_state'],r=>{if(r.qp_state&&JSON.stringify(r.qp_state)!==JSON.stringify(state)){state=r.qp_state;spRender();}});},1000);
-spRender();`;
+// Poll storage every 600ms — catches state even if message was missed
+setInterval(loadState,600);
+// Load immediately and again after a short delay
+loadState();
+setTimeout(loadState,300);
+setTimeout(loadState,1000);`;
 
   const SIDEPANEL_HTML=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Quest Tracker</title>
 <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Georgia,serif;background:#3D0A14;color:white;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
