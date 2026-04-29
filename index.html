@@ -993,10 +993,6 @@ function loadRanks(){
 function saveRanks(){localStorage.setItem('dq_ranks',JSON.stringify(RANKS));}
 let RANKS=loadRanks();
 const BADGES=[
-  {id:'fx',label:'First Blood',desc:'First XP',icon:'🩸',chk:s=>s.te>=1,bg:'#F8EDEF',tx:'#6B1A2A'},
-  {id:'c1',label:'Centurion',desc:'100 XP',icon:'💯',chk:s=>s.te>=100,bg:'#F0EAF5',tx:'#4A1A6B'},
-  {id:'v5',label:'Veteran',desc:'500 XP',icon:'🎗️',chk:s=>s.te>=500,bg:'#F0E0E4',tx:'#4A1020'},
-  {id:'sc',label:'Scholar',desc:'1000 XP',icon:'📜',chk:s=>s.te>=1000,bg:'#FDF6E8',tx:'#7A5500'},
   {id:'sl',label:'Soldier',desc:'Reached Soldier',icon:'⚔️',chk:s=>s.lv>=5,bg:'#F0EAF5',tx:'#5A3A6B'},
   {id:'cp',label:'Captain',desc:'Reached Captain',icon:'🎖️',chk:s=>s.lv>=10,bg:'#F8EDEF',tx:'#6B1A2A'},
   {id:'gn',label:'General',desc:'Reached General',icon:'👑',chk:s=>s.lv>=15,bg:'#F0E0E4',tx:'#3D0A14'},
@@ -1308,13 +1304,14 @@ function setPVC(c){
 
 function sCard(s,forAward){
   const rk=getRank(s.lv);const p=pct(s);const sel=selIds.has(s.id);
+  const allB=getAllBadges();
   // Show up to 2 regular badges + season badges
   const regularBdg=s.badges.slice(-2).map(bid=>{
-    const b=BADGES.find(x=>x.id===bid)||customBadges.find(x=>x.id===bid);
+    const b=allB.find(x=>x.id===bid);
     return b?`<span class="bdg" style="background:${b.bg};color:${b.tx};">${b.icon} ${b.label}</span>`:'';
   }).join('');
   const svBdg=Object.entries(s.seasonBadges||{}).filter(([,count])=>count>0).map(([id,count])=>{
-    const b=BADGES.find(x=>x.id===id);
+    const b=allB.find(x=>x.id===id);
     return b?`<span class="bdg" style="background:${b.bg};color:${b.tx};">${b.icon}${count>1?' ×'+count:''}</span>`:'';
   }).join('');
   const bdg=regularBdg+svBdg;
@@ -2707,6 +2704,7 @@ function renderChallengeGrid(){
     </div>`;
   }).join('');
   updateMeter(list);
+  if(window._qpPaint)window._qpPaint();// Keep floating overlay in sync
 }
 
 function markAbsent(id){
@@ -3071,12 +3069,35 @@ function openQuickParticipation(){
       document.getElementById('pc-complete').style.display='block';
       document.getElementById('pc-complete-msg').textContent=pcState.prize?`Every student participated! Class prize: ${pcState.prize}`:'Every student participated!';
       spawnConfetti();
+      if(window.qpShowComplete)qpShowComplete();
     }
   };
 
   // Keep overlay in sync with main challenge state
   window._qpPaint=qpPaint;
+
+  // Add completion banner area inside overlay
+  const compBanner=document.createElement('div');
+  compBanner.id='qpf-complete';
+  compBanner.style.cssText='display:none;padding:12px;background:#1A6B2A;text-align:center;border-top:1px solid #2A8B3A;';
+  compBanner.innerHTML=`<div style="font-size:20px;margin-bottom:4px;">🎉</div><div style="font-family:'Cinzel',serif;font-size:13px;color:#E8C97A;">Challenge Complete!</div><button onclick="awardChallengeXP()" style="margin-top:8px;font-size:12px;padding:6px 16px;background:#C9923A;color:white;border:none;border-radius:6px;cursor:pointer;font-family:'Cinzel',serif;">🏆 Award XP</button>`;
+  el.appendChild(compBanner);
+
+  // Tip for switching apps
+  const tip=document.createElement('div');
+  tip.style.cssText='font-size:10px;color:rgba(255,255,255,.3);text-align:center;padding:4px 8px;border-top:1px solid rgba(255,255,255,.08);';
+  tip.textContent='Drag to move · stays visible while switching QT tabs';
+  el.appendChild(tip);
+
   qpPaint();
+
+  // Expose paint so challenge grid updates trigger overlay update
+  window._qpPaint=qpPaint;
+}
+
+function qpShowComplete(){
+  const b=document.getElementById('qpf-complete');
+  if(b)b.style.display='block';
 }
 
 function editAttDays(id){
