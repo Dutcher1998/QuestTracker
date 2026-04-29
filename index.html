@@ -844,7 +844,22 @@ html,body{scroll-behavior:auto;}
         </div>
       </div>
       <div class="aws">
-        <h3>Season reset</h3>
+        <h3>🧩 Chrome Extension — Class Challenge Side Panel</h3>
+        <p style="font-size:13px;color:var(--INK3);margin-bottom:1rem;line-height:1.6;">The extension adds a persistent side panel to Chrome that shows the participation tracker — it stays visible while you switch to any other tab, including Google Classroom or your assignments.</p>
+        <div style="background:var(--GP);border-radius:var(--R);padding:14px;margin-bottom:1rem;">
+          <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--MD);margin-bottom:10px;letter-spacing:.5px;">HOW TO INSTALL</div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--INK);">
+            <div>1. Download the extension ZIP from the link below</div>
+            <div>2. Unzip the file to a folder on your computer</div>
+            <div>3. Open Chrome and go to <code style="background:var(--GL);padding:1px 6px;border-radius:4px;">chrome://extensions</code></div>
+            <div>4. Enable <strong>Developer Mode</strong> (toggle, top-right)</div>
+            <div>5. Click <strong>Load unpacked</strong> → select the unzipped folder</div>
+            <div>6. Click the 🎯 icon in Chrome toolbar to open the side panel</div>
+          </div>
+        </div>
+        <a class="btn bm" href="https://dutcher1998.github.io/QuestTracker/QuestTracker-Extension.zip" download style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;">⬇️ Download Extension</a>
+        <div style="font-size:12px;color:var(--INK3);margin-top:8px;">Requires Chrome 114 or newer. The side panel stays open when switching tabs — start a challenge first, then click the 🎯 icon.</div>
+      </div>
         <div class="reset-warn">⚠️ This will reset all student XP to zero and levels to 1. Students keep custom badges and the Legend badge (if earned). Each student receives a tiered season badge based on their final rank. Cannot be undone.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn bd" onclick="seasonReset()">Reset Season</button>
@@ -2638,6 +2653,53 @@ let pcState={
   tally:{},absent:new Set(),awarded:false
 };
 
+// Sync challenge state to localStorage so the Chrome extension can read it
+function syncPCState(){
+  if(!pcState.active){
+    localStorage.setItem('dq_qp_data',JSON.stringify({active:false}));
+    return;
+  }
+  try{
+    const list=filt(pcState.cls).filter(s=>!pcState.absent.has(s.id));
+    const names=list.map(s=>({
+      id:s.id,
+      name:s.name.split(' ')[0],
+      count:pcState.tally[s.id]||0,
+      needed:pcState.needed,
+      done:(pcState.tally[s.id]||0)>=pcState.needed
+    }));
+    localStorage.setItem('dq_qp_data',JSON.stringify({
+      active:true,
+      students:names,
+      needed:pcState.needed,
+      cls:pcState.cls==='All'?'All Classes':pcState.cls,
+      prize:pcState.prize||'',
+      awarded:pcState.awarded
+    }));
+  }catch(e){}
+}
+
+// Global qpTap so extension content script can call window.qpTap(id)
+window.qpTap=function(id){
+  if(!pcState.active)return;
+  const count=pcState.tally[id]||0;
+  if(count>=pcState.needed)pcState.tally[id]=Math.max(0,count-1);
+  else pcState.tally[id]=count+1;
+  syncPCState();
+  renderChallengeGrid();
+  if(window._qpPaint)window._qpPaint();
+  const list=filt(pcState.cls).filter(s=>!pcState.absent.has(s.id));
+  const present=list.filter(s=>!pcState.absent.has(s.id));
+  if(present.length>0&&present.every(s=>(pcState.tally[s.id]||0)>=pcState.needed)&&!pcState.awarded){
+    const comp=document.getElementById('pc-complete');
+    if(comp)comp.style.display='block';
+    const msg=document.getElementById('pc-complete-msg');
+    if(msg)msg.textContent=pcState.prize?`Every student participated! Class prize: ${pcState.prize}`:'Every student participated!';
+    spawnConfetti();
+    if(window.qpShowComplete)qpShowComplete();
+  }
+};
+
 function renderParticipationSetup(){
   const el=document.getElementById('cp-pc');if(!el)return;
   const cls=getCls();
@@ -2679,6 +2741,7 @@ function startChallenge(){
     },500);
   } else {document.getElementById('pc-timer-display').style.display='none';}
   renderChallengeGrid();
+  syncPCState();// Keep extension in sync
 }
 
 function renderChallengeGrid(){
@@ -2722,11 +2785,13 @@ function markAbsent(id){
   }
   pcState.tally[id]=0;
   pcState.absent.add(id);
+  syncPCState();
   renderChallengeGrid();
 }
 
 function markPresent(id){
   pcState.absent.delete(id);
+  syncPCState();
   renderChallengeGrid();
 }
 
@@ -2795,6 +2860,7 @@ function awardChallengeXP(){
 function resetChallenge(){
   if(pcState.timerInterval)clearInterval(pcState.timerInterval);
   pcState.active=false;pcState.tally={};
+  syncPCState();
   document.getElementById('pc-setup').style.display='block';
   document.getElementById('pc-active').style.display='none';
   document.getElementById('pc-complete').style.display='none';
