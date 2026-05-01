@@ -871,6 +871,16 @@ html,body{scroll-behavior:auto;}
               <button class="btn bo bsm" onclick="showFirestorePathPlan()">Show Database Path Plan</button>
             </div>
             <div id="firebase-helper-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;margin-top:8px;white-space:pre-wrap;">Database helpers: not tested yet.</div>
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--BDG);">
+              <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Step 10: settings/global migration</div>
+              <div style="font-size:12px;color:var(--INK3);margin-bottom:8px;">This migrates only low-risk app settings. Student roster, XP logs, attendance, and assignment records stay local for now.</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <button class="btn bm bsm" onclick="uploadSettingsToFirestore()">Upload Settings to Firestore</button>
+                <button class="btn bo bsm" onclick="downloadSettingsFromFirestore()">Download Settings from Firestore</button>
+                <button class="btn bg bsm" onclick="compareLocalVsFirestoreSettings()">Compare Local vs Firestore Settings</button>
+              </div>
+              <div id="firebase-settings-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Settings migration: not tested yet.</div>
+            </div>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
@@ -1261,6 +1271,152 @@ async function runFirestoreHelperTest(){
     setFirebaseHelperStatus(msg,'#8B1A1A');
     showEB('Firestore helper test failed'+code+'. Check the helper status box.');
     return false;
+  }
+}
+
+function setFirebaseSettingsStatus(msg,color){
+  const el=document.getElementById('firebase-settings-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+}
+
+function clonePlain(obj){
+  return JSON.parse(JSON.stringify(obj ?? null));
+}
+
+function makeGlobalSettingsObject(){
+  return {
+    schemaVersion:1,
+    dataVersion:DATA_VERSION,
+    updatedAtClient:new Date().toISOString(),
+    updatedBy:getCurrentFirebaseEmail()||null,
+    source:'Quest Tracker settings/global Step 10',
+    containsStudentData:false,
+    ranks:clonePlain(RANKS),
+    levelTable:clonePlain(LVS),
+    xpActivities:clonePlain(acts),
+    privileges:clonePlain(privs),
+    xpCategories:clonePlain(xpCategories),
+    customBadges:clonePlain(customBadges),
+    seasonRewards:clonePlain(seasonRewards),
+    savedPeriods:clonePlain(savedPeriods)
+  };
+}
+
+function comparableGlobalSettings(settings){
+  return {
+    schemaVersion:settings?.schemaVersion||1,
+    dataVersion:settings?.dataVersion||DATA_VERSION,
+    ranks:clonePlain(settings?.ranks||[]),
+    levelTable:clonePlain(settings?.levelTable||[]),
+    xpActivities:clonePlain(settings?.xpActivities||[]),
+    privileges:clonePlain(settings?.privileges||[]),
+    xpCategories:clonePlain(settings?.xpCategories||[]),
+    customBadges:clonePlain(settings?.customBadges||[]),
+    seasonRewards:clonePlain(settings?.seasonRewards||{}),
+    savedPeriods:clonePlain(settings?.savedPeriods||[])
+  };
+}
+
+function stableStringify(obj){
+  if(obj===null||typeof obj!=='object')return JSON.stringify(obj);
+  if(Array.isArray(obj))return '['+obj.map(stableStringify).join(',')+']';
+  return '{'+Object.keys(obj).sort().map(k=>JSON.stringify(k)+':'+stableStringify(obj[k])).join(',')+'}';
+}
+
+function applyGlobalSettingsObject(data){
+  if(!data||typeof data!=='object')throw new Error('Firestore settings/global document is empty or invalid.');
+  if(Array.isArray(data.ranks)&&data.ranks.length)RANKS=clonePlain(data.ranks);
+  if(Array.isArray(data.levelTable)&&data.levelTable.length){LVS=clonePlain(data.levelTable);saveCustomXP(LVS);}else{rebuildLVS();}
+  if(Array.isArray(data.xpActivities))acts=clonePlain(data.xpActivities);
+  if(Array.isArray(data.privileges))privs=clonePlain(data.privileges);
+  if(Array.isArray(data.xpCategories))xpCategories=clonePlain(data.xpCategories);
+  if(Array.isArray(data.customBadges))customBadges=clonePlain(data.customBadges);
+  if(data.seasonRewards&&typeof data.seasonRewards==='object')seasonRewards=clonePlain(data.seasonRewards);
+  if(Array.isArray(data.savedPeriods))savedPeriods=clonePlain(data.savedPeriods);
+  saveRanks();
+  save();
+  savePeriods();
+  render();
+  renderRankEditor();
+}
+
+async function uploadSettingsToFirestore(){
+  try{
+    setFirebaseSettingsStatus('Settings migration: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    if(!confirm('Upload local settings to Firestore at settings/global? This will not upload students, XP logs, attendance, or assignment records.'))return;
+    const fb=getFirebaseObjects();
+    const ref=fb.sdk.doc(fb.db,'settings','global');
+    const payload=makeGlobalSettingsObject();
+    payload.updatedAt=fb.sdk.serverTimestamp();
+    setFirebaseSettingsStatus('Settings migration: uploading local settings to Firestore settings/global...','#7A5500');
+    await fb.sdk.setDoc(ref,payload,{merge:true});
+    setFirebaseSettingsStatus([
+      'Settings migration: SUCCESS.',
+      'Uploaded local settings to Firestore path: settings/global',
+      'Student roster, XP logs, attendance, and assignment records were NOT uploaded.',
+      'Updated by: '+(payload.updatedBy||'unknown')
+    ].join('\n'),'#1A6B2A');
+    showEB('Settings uploaded to Firestore. Student data was not uploaded.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseSettingsStatus('Settings upload FAILED'+code+'. '+(e?.message||e)+'\n\nIf this says permission-denied, publish the Step 10 rules that allow approved teachers to read/write settings/global.','#8B1A1A');
+    showEB('Settings upload failed'+code+'. Check the settings migration box.');
+  }
+}
+
+async function downloadSettingsFromFirestore(){
+  try{
+    setFirebaseSettingsStatus('Settings migration: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    const fb=getFirebaseObjects();
+    const ref=fb.sdk.doc(fb.db,'settings','global');
+    setFirebaseSettingsStatus('Settings migration: reading Firestore settings/global...','#7A5500');
+    const snap=await fb.sdk.getDoc(ref);
+    if(!snap.exists())throw new Error('settings/global does not exist yet. Upload settings first.');
+    const data=snap.data();
+    if(!confirm('Download Firestore settings/global and apply them to this browser? This replaces local rank/settings configuration, but does not replace students.'))return;
+    applyGlobalSettingsObject(data);
+    setFirebaseSettingsStatus([
+      'Settings migration: SUCCESS.',
+      'Downloaded and applied Firestore settings/global to local app settings.',
+      'Student roster, XP logs, attendance, and assignment records were NOT changed.',
+      'Last client update: '+(data.updatedAtClient||'unknown')
+    ].join('\n'),'#1A6B2A');
+    showEB('Settings downloaded from Firestore and applied locally.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseSettingsStatus('Settings download FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+    showEB('Settings download failed'+code+'. Check the settings migration box.');
+  }
+}
+
+async function compareLocalVsFirestoreSettings(){
+  try{
+    setFirebaseSettingsStatus('Settings migration: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    const fb=getFirebaseObjects();
+    const ref=fb.sdk.doc(fb.db,'settings','global');
+    setFirebaseSettingsStatus('Settings migration: comparing local settings with Firestore settings/global...','#7A5500');
+    const snap=await fb.sdk.getDoc(ref);
+    if(!snap.exists())throw new Error('settings/global does not exist yet. Upload settings first.');
+    const local=comparableGlobalSettings(makeGlobalSettingsObject());
+    const remote=comparableGlobalSettings(snap.data());
+    const sections=['ranks','levelTable','xpActivities','privileges','xpCategories','customBadges','seasonRewards','savedPeriods'];
+    const differences=sections.filter(k=>stableStringify(local[k])!==stableStringify(remote[k]));
+    const same=differences.length===0;
+    setFirebaseSettingsStatus([
+      same?'Settings comparison: MATCH.':'Settings comparison: DIFFERENCES FOUND.',
+      'Firestore path: settings/global',
+      'Compared only low-risk configuration settings.',
+      same?'Local settings match Firestore settings.':'Different sections: '+differences.join(', '),
+      'Student roster, XP logs, attendance, and assignment records were not compared or changed.'
+    ].join('\n'),same?'#1A6B2A':'#7A5500');
+    showEB(same?'Local settings match Firestore.':'Local settings differ from Firestore.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseSettingsStatus('Settings comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+    showEB('Settings comparison failed'+code+'. Check the settings migration box.');
   }
 }
 
