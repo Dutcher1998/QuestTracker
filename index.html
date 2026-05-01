@@ -857,7 +857,7 @@ html,body{scroll-behavior:auto;}
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
           <div>
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Firebase database prep</div>
-            <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Firebase is now wired into this app, but local storage is still the source of truth until we migrate each data type.</div>
+            <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Firebase is wired into this app. Migration is complete; Live Database Mode can now load from and auto-save to Firestore while keeping local storage as a fallback.</div>
             <div id="firebase-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;margin-bottom:8px;">Firebase status: checking...</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
               <button class="btn bo bsm" onclick="refreshFirebaseStatus()">Check Firebase Status</button>
@@ -932,8 +932,12 @@ html,body{scroll-behavior:auto;}
                 <button class="btn bo bsm" onclick="loadAllFirestoreDataToLocal()">Load Firestore Into Local App</button>
                 <button class="btn bgold bsm" onclick="enableDatabaseModeFlag()">Enable Database Mode Flag</button>
                 <button class="btn bo bsm" onclick="disableDatabaseModeFlag()">Disable Database Mode Flag</button>
+                <button class="btn bm bsm" onclick="startLiveDatabaseMode()">Start Live Database Mode</button>
+                <button class="btn bd bsm" onclick="stopLiveDatabaseMode()">Stop Live Database Mode</button>
+                <button class="btn bg bsm" onclick="pushFullLocalStateToFirestore('manual full push')">Save Local Data to Firestore Now</button>
               </div>
               <div id="firebase-fullsync-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Full database sync prep: not tested yet.</div>
+              <div id="firebase-live-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;margin-top:8px;white-space:pre-wrap;">Live Database Mode: not started. Local storage is still the safety cache.</div>
             </div>
           </div>
 
@@ -2214,6 +2218,11 @@ async function compareLocalVsFirestoreQuests(){
    full comparison, and Firestore-to-local loading tools.
    ───────────────────────────────────────────────────────────── */
 const QT_DATABASE_MODE_KEY='dq_database_mode_enabled';
+const QT_LIVE_DATABASE_ACTIVE_KEY='dq_live_database_active';
+let qtLiveDatabaseActive=false;
+let qtLiveSyncTimer=null;
+let qtLiveSyncInProgress=false;
+let qtLivePendingReason='';
 
 function setFirebaseFullSyncStatus(msg,color){
   const el=document.getElementById('firebase-fullsync-status');
@@ -2699,6 +2708,190 @@ async function disableDatabaseModeFlag(){
   }
 }
 
+
+function setFirebaseLiveStatus(msg,color){
+  const el=document.getElementById('firebase-live-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+}
+
+function isDatabaseModeFlagOn(){
+  return localStorage.getItem(QT_DATABASE_MODE_KEY)==='true';
+}
+
+function isLiveDatabaseModeActive(){
+  return qtLiveDatabaseActive===true || localStorage.getItem(QT_LIVE_DATABASE_ACTIVE_KEY)==='true';
+}
+
+function markLiveDatabaseModeActive(active){
+  qtLiveDatabaseActive=!!active;
+  localStorage.setItem(QT_LIVE_DATABASE_ACTIVE_KEY,active?'true':'false');
+  setFirebaseLiveStatus(active
+    ?'Live Database Mode: ON. Firestore is now the active source of truth. Local storage remains as a safety cache. Changes will auto-save to Firestore.'
+    :'Live Database Mode: OFF. The app is using local storage as the active source of truth.',
+    active?'#1A6B2A':'#7A5500');
+}
+
+async function pushFullLocalStateToFirestore(reason){
+  if(qtLiveSyncInProgress){
+    qtLivePendingReason=reason||qtLivePendingReason||'pending change';
+    return false;
+  }
+  try{
+    qtLiveSyncInProgress=true;
+    const label=reason?(' — '+reason):'';
+    setFirebaseLiveStatus('Live Database Mode: saving local app data to Firestore'+label+'...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    sanitizeStoredGradeDetails();
+    const fb=getFirebaseObjects();
+
+    await fb.sdk.setDoc(fb.sdk.doc(fb.db,'settings','global'),{
+      ...makeGlobalSettingsObject(),
+      updatedAt:fb.sdk.serverTimestamp(),
+      updatedBy:fb.currentUser?.email||null,
+      liveSync:true
+    },{merge:false});
+
+    await replaceCollectionFromLocal('students',getLocalStudentProfilesForFirestore(),comparableStudentProfile);
+    await replaceCollectionFromLocal('xpLogs',getLocalXpLogsForFirestore(),comparableXpLog);
+    await replaceCollectionFromLocal('assignments',getLocalAssignmentAwardsForFirestore(),comparableAssignmentAward);
+    await replaceCollectionFromLocal('quests',getLocalQuestsForFirestore(),comparableQuest);
+    await replaceCollectionFromLocal('classes',getLocalClassesForFirestore(),comparableClass);
+    await replaceCollectionFromLocal('attendance',getLocalAttendanceForFirestore(),comparableAttendanceRecord);
+
+    await fb.sdk.setDoc(fb.sdk.doc(fb.db,'challengeState','current'),{
+      ...serializeChallengeStateForFirestore(),
+      updatedAt:fb.sdk.serverTimestamp(),
+      updatedBy:fb.currentUser?.email||null
+    },{merge:false});
+
+    await fb.sdk.setDoc(fb.sdk.doc(fb.db,'databaseMeta','liveMode'),{
+      enabled:true,
+      liveSourceActive:true,
+      lastSyncedAt:fb.sdk.serverTimestamp(),
+      lastSyncedBy:fb.currentUser?.email||null,
+      sourceSystem:'Quest Tracker Live Database Mode',
+      localFallbackEnabled:true
+    },{merge:true});
+
+    const stamp=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    setFirebaseLiveStatus('Live Database Mode: saved to Firestore at '+stamp+'. Reason: '+(reason||'manual save')+'. Local storage remains as fallback.','#1A6B2A');
+    return true;
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseLiveStatus('Live Database Mode save FAILED'+code+'. '+(e?.message||e)+'\n\nLocal storage still has your changes. Check Firebase sign-in/rules, then use “Save Local Data to Firestore Now.”','#8B1A1A');
+    console.error('Live database save failed',e);
+    return false;
+  }finally{
+    qtLiveSyncInProgress=false;
+    if(qtLivePendingReason){
+      const pending=qtLivePendingReason;
+      qtLivePendingReason='';
+      scheduleLiveDatabaseSave('pending change after '+pending,1200);
+    }
+  }
+}
+
+function scheduleLiveDatabaseSave(reason,delay){
+  if(!isLiveDatabaseModeActive())return;
+  if(qtLiveSyncTimer)clearTimeout(qtLiveSyncTimer);
+  const wait=typeof delay==='number'?delay:4500;
+  setFirebaseLiveStatus('Live Database Mode: local change detected. Auto-saving to Firestore soon...\nReason: '+(reason||'data changed'),'#7A5500');
+  qtLiveSyncTimer=setTimeout(()=>{
+    qtLiveSyncTimer=null;
+    pushFullLocalStateToFirestore(reason||'auto-save');
+  },wait);
+}
+
+async function startLiveDatabaseMode(){
+  try{
+    setFirebaseLiveStatus('Live Database Mode: starting... checking Firebase teacher access.','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    if(!isDatabaseModeFlagOn()){
+      const proceed=confirm('The Database Mode flag is not currently enabled in this browser.\n\nEnable it and continue starting Live Database Mode?');
+      if(!proceed)return;
+      localStorage.setItem(QT_DATABASE_MODE_KEY,'true');
+      await uploadDatabaseModeMetaToFirestore(true);
+    }
+    const loadFirst=confirm('Start Live Database Mode?\n\nRecommended: click OK to load Firestore into the app first, then turn on live auto-save.\n\nClick Cancel to keep the current local data and only turn on auto-save.');
+    if(loadFirst){
+      await loadAllFirestoreDataToLocalNoConfirm();
+    }
+    markLiveDatabaseModeActive(true);
+    await pushFullLocalStateToFirestore('Live Database Mode started');
+    showEB('Live Database Mode started. Firestore is active; local storage remains as fallback.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseLiveStatus('Live Database Mode start FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+    showEB('Live Database Mode start failed'+code+'.');
+  }
+}
+
+function stopLiveDatabaseMode(){
+  if(qtLiveSyncTimer){clearTimeout(qtLiveSyncTimer);qtLiveSyncTimer=null;}
+  markLiveDatabaseModeActive(false);
+  showEB('Live Database Mode stopped. Local storage is active.');
+}
+
+async function loadAllFirestoreDataToLocalNoConfirm(){
+  const fb=getFirebaseObjects();
+  setFirebaseLiveStatus('Live Database Mode: loading Firestore data into app...','#7A5500');
+  const settingsSnap=await fb.sdk.getDoc(fb.sdk.doc(fb.db,'settings','global'));
+  if(settingsSnap.exists())applyGlobalSettingsObject(settingsSnap.data());
+  const studentMap=await getCollectionMap('students');
+  students=[...studentMap.values()].map(firestoreStudentProfileToLocal).sort((a,b)=>a.name.localeCompare(b.name));
+  const xpMap=await getCollectionMap('xpLogs');
+  const histByStudent={};
+  [...xpMap.values()].forEach(x=>{
+    const sid=String(x.studentId||'');
+    if(!sid)return;
+    if(!histByStudent[sid])histByStudent[sid]=[];
+    histByStudent[sid].push({amt:Number(x.amount||0),reason:String(x.reason||''),time:String(x.time||''),date:String(x.date||'')});
+  });
+  students.forEach(s=>{s.hist=(histByStudent[s.id]||[]).slice(0,200);});
+  const questMap=await getCollectionMap('quests');
+  quests=[...questMap.values()].sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).map(q=>({id:q.id,title:q.title,desc:q.description,icon:q.icon,xp:q.xp,deadline:q.deadline}));
+  const assignMap=await getCollectionMap('assignments');
+  awardedSubmissions={};
+  [...assignMap.values()].forEach(a=>{
+    if(a.submissionKey){
+      awardedSubmissions[a.submissionKey]=a.status==='awarded'||a.preventsDoubleAwarding===true||a.submitted===true;
+      awardedSubmissions[a.submissionKey+'_xp']=Number(a.xpAwardedTotal||0);
+    }
+  });
+  const attMap=await getCollectionMap('attendance');
+  attStates={};
+  [...attMap.values()].forEach(a=>{
+    const cls=String(a.className||'Unassigned');
+    attStates[cls]={date:a.date||null,absent:new Set(a.absentStudentIds||[]),submitted:a.submitted===true};
+  });
+  const chSnap=await fb.sdk.getDoc(fb.sdk.doc(fb.db,'challengeState','current'));
+  if(chSnap.exists()){
+    const c=chSnap.data();
+    pcState.active=c.active===true;
+    pcState.cls=String(c.className||'All');
+    pcState.needed=Number(c.needed||1);
+    pcState.xp=Number(c.xp||25);
+    pcState.prize=String(c.prize||'');
+    pcState.timerMin=Number(c.timerMin||0);
+    pcState.timerEnd=c.timerEndClient||null;
+    pcState.tally=clonePlain(c.tally||{});
+    pcState.absent=new Set(c.absentStudentIds||[]);
+    pcState.awarded=c.awarded===true;
+    pcState.pickerExcludeAbsent=c.pickerExcludeAbsent===true;
+  }
+  sanitizeStoredGradeDetails();
+  save();saveAttendance();syncPCState();render();renderAttendance();renderParticipationSetup();
+  setFirebaseLiveStatus('Live Database Mode: Firestore data loaded into app. Local storage updated as fallback.','#1A6B2A');
+}
+
+window.addEventListener('qt-firebase-auth-changed',()=>{
+  refreshFirebaseStatus(true);
+  if(localStorage.getItem(QT_LIVE_DATABASE_ACTIVE_KEY)==='true' && !qtLiveDatabaseActive){
+    qtLiveDatabaseActive=true;
+    setFirebaseLiveStatus('Live Database Mode: remembered as ON. Sign in/check teacher access, then changes will auto-save.','#7A5500');
+  }
+});
+
 function getTeacherEmails(){return[];}// No longer used for access control
 
 function isTeacherEmail(email){
@@ -2931,6 +3124,7 @@ function save(){
     localStorage.setItem('dq_cats',JSON.stringify(xpCategories));
     localStorage.setItem('dq_awarded',JSON.stringify(awardedSubmissions));
     localStorage.setItem('dq_sr',JSON.stringify(seasonRewards));
+    scheduleLiveDatabaseSave('Quest Tracker data changed');
   }catch(e){}
 }
 function load(){
@@ -4889,6 +5083,7 @@ function syncPCState(){
       done:done,
       absentCount:list.length-present.length
     }));
+    scheduleLiveDatabaseSave('Class challenge state changed');
   }catch(e){}
 }
 
@@ -5097,6 +5292,7 @@ function saveAttendance(){
     toSave[cls]={date:s.date,absent:[...s.absent],submitted:s.submitted};
   });
   localStorage.setItem(ATT_KEY,JSON.stringify(toSave));
+  scheduleLiveDatabaseSave('Attendance changed');
 }
 
 function renderAttendance(){
