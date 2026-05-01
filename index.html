@@ -881,6 +881,16 @@ html,body{scroll-behavior:auto;}
               </div>
               <div id="firebase-settings-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Settings migration: not tested yet.</div>
             </div>
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--BDG);">
+              <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Step 11: student profile migration</div>
+              <div style="font-size:12px;color:var(--INK3);margin-bottom:8px;">This uploads student profile summaries only: names, classes, Google IDs, XP totals, levels, badges, attendance-day totals, and avatar info. It does not upload detailed XP history, assignment logs, exact grades, or participation challenge state.</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <button class="btn bo bsm" onclick="previewStudentProfileMigration()">Preview Student Profiles</button>
+                <button class="btn bm bsm" onclick="uploadStudentProfilesToFirestore()">Upload Student Profiles to Firestore</button>
+                <button class="btn bg bsm" onclick="compareLocalVsFirestoreStudents()">Compare Local vs Firestore Students</button>
+              </div>
+              <div id="firebase-students-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Student profile migration: not tested yet.</div>
+            </div>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
@@ -1417,6 +1427,174 @@ async function compareLocalVsFirestoreSettings(){
     const code=e?.code?(' ['+e.code+']') : '';
     setFirebaseSettingsStatus('Settings comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
     showEB('Settings comparison failed'+code+'. Check the settings migration box.');
+  }
+}
+
+
+
+function setFirebaseStudentsStatus(msg,color){
+  const el=document.getElementById('firebase-students-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+}
+
+function makeStudentProfileForFirestore(s){
+  const xp=Number(s?.xp||0);
+  const level=Number(s?.lv||s?.level||1);
+  const totalEarned=Number(s?.te||s?.totalEarned||xp);
+  return {
+    schemaVersion:1,
+    id:String(s?.id||''),
+    name:String(s?.name||''),
+    normalizedName:String(s?.name||'').trim().toLowerCase(),
+    className:String(s?.cls||s?.className||''),
+    classId:safeFirestoreId(s?.cls||s?.className||'unassigned'),
+    googleId:s?.gid?String(s.gid):null,
+    xp,
+    level,
+    totalEarned,
+    badges:Array.isArray(s?.badges)?clonePlain(s.badges):[],
+    seasonBadges:(s?.seasonBadges&&typeof s.seasonBadges==='object')?clonePlain(s.seasonBadges):{},
+    attendanceDays:Number(s?.attendanceDays||0),
+    avatarIndex:Number.isFinite(Number(s?.ai))?Number(s.ai):null,
+    avatarIcon:s?.avatarIcon?String(s.avatarIcon):null,
+    motto:s?.motto?String(s.motto):'',
+    pictureUrl:s?.pic?String(s.pic):null,
+    active:s?.active===false?false:true,
+    updatedAtClient:new Date().toISOString(),
+    updatedBy:getCurrentFirebaseEmail()||null,
+    source:'Quest Tracker students/{studentId} Step 11 profile summary',
+    containsStudentProfileData:true,
+    containsDetailedXpHistory:false,
+    containsAssignmentGradeDetails:false
+  };
+}
+
+function comparableStudentProfile(profile){
+  return {
+    schemaVersion:profile?.schemaVersion||1,
+    id:String(profile?.id||''),
+    name:String(profile?.name||''),
+    normalizedName:String(profile?.normalizedName||String(profile?.name||'').trim().toLowerCase()),
+    className:String(profile?.className||''),
+    classId:String(profile?.classId||safeFirestoreId(profile?.className||'unassigned')),
+    googleId:profile?.googleId?String(profile.googleId):null,
+    xp:Number(profile?.xp||0),
+    level:Number(profile?.level||1),
+    totalEarned:Number(profile?.totalEarned||profile?.xp||0),
+    badges:Array.isArray(profile?.badges)?clonePlain(profile.badges):[],
+    seasonBadges:(profile?.seasonBadges&&typeof profile.seasonBadges==='object')?clonePlain(profile.seasonBadges):{},
+    attendanceDays:Number(profile?.attendanceDays||0),
+    avatarIndex:Number.isFinite(Number(profile?.avatarIndex))?Number(profile.avatarIndex):null,
+    avatarIcon:profile?.avatarIcon?String(profile.avatarIcon):null,
+    motto:profile?.motto?String(profile.motto):'',
+    pictureUrl:profile?.pictureUrl?String(profile.pictureUrl):null,
+    active:profile?.active===false?false:true
+  };
+}
+
+function getLocalStudentProfilesForFirestore(){
+  return students.map(makeStudentProfileForFirestore).filter(s=>s.id&&s.name);
+}
+
+function previewStudentProfileMigration(){
+  try{
+    const profiles=getLocalStudentProfilesForFirestore();
+    const classes=[...new Set(profiles.map(s=>s.className||'Unassigned'))].sort();
+    const sample=profiles.slice(0,5).map(s=>'• '+s.name+' — '+(s.className||'Unassigned')+' — XP '+s.xp+' — Level '+s.level).join('\n');
+    setFirebaseStudentsStatus([
+      'Student profile migration preview:',
+      'Local student profiles ready: '+profiles.length,
+      'Classes found: '+classes.length+(classes.length?' ('+classes.join(', ')+')':''),
+      'Will upload to: students/{studentId}',
+      'Will NOT upload detailed XP history, assignment logs, exact scores, or participation challenge state.',
+      sample?'Sample:\n'+sample:'No student profiles found.'
+    ].join('\n'),'#7A5500');
+  }catch(e){
+    setFirebaseStudentsStatus('Student profile preview FAILED. '+(e?.message||e),'#8B1A1A');
+  }
+}
+
+async function uploadStudentProfilesToFirestore(){
+  try{
+    setFirebaseStudentsStatus('Student profile migration: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    const profiles=getLocalStudentProfilesForFirestore();
+    if(!profiles.length)throw new Error('No local students found to upload.');
+    const msg='Upload '+profiles.length+' student profile summaries to Firestore?\n\nThis WILL upload student names, class names, Google IDs, XP totals, levels, badges, attendance-day totals, and avatar info.\n\nThis will NOT upload detailed XP history, assignment logs, exact grade percentages, or participation challenge state.';
+    if(!confirm(msg))return;
+    const fb=getFirebaseObjects();
+    setFirebaseStudentsStatus('Student profile migration: uploading '+profiles.length+' profiles to students/{studentId}...','#7A5500');
+    const chunks=[];
+    for(let i=0;i<profiles.length;i+=450)chunks.push(profiles.slice(i,i+450));
+    for(let c=0;c<chunks.length;c++){
+      const batch=fb.sdk.writeBatch(fb.db);
+      chunks[c].forEach(profile=>{
+        const payload={...profile,updatedAt:fb.sdk.serverTimestamp()};
+        const ref=fb.sdk.doc(fb.db,'students',profile.id);
+        batch.set(ref,payload,{merge:true});
+      });
+      await batch.commit();
+      setFirebaseStudentsStatus('Student profile migration: uploaded batch '+(c+1)+' of '+chunks.length+'...','#7A5500');
+    }
+    setFirebaseStudentsStatus([
+      'Student profile migration: SUCCESS.',
+      'Uploaded student profile summaries: '+profiles.length,
+      'Firestore path: students/{studentId}',
+      'Detailed XP history, assignment logs, exact grades, and participation challenge state were NOT uploaded.',
+      'Next recommended check: Compare Local vs Firestore Students.'
+    ].join('\n'),'#1A6B2A');
+    showEB('Student profile summaries uploaded to Firestore. Detailed logs were not uploaded.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseStudentsStatus('Student profile upload FAILED'+code+'. '+(e?.message||e)+'\n\nIf this says permission-denied, publish the Step 11 rules that allow approved teachers to read/write students/{studentId}.','#8B1A1A');
+    showEB('Student profile upload failed'+code+'. Check the student migration box.');
+  }
+}
+
+async function compareLocalVsFirestoreStudents(){
+  try{
+    setFirebaseStudentsStatus('Student profile comparison: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    const fb=getFirebaseObjects();
+    const localProfiles=getLocalStudentProfilesForFirestore();
+    if(!localProfiles.length)throw new Error('No local students found to compare.');
+    setFirebaseStudentsStatus('Student profile comparison: reading Firestore students collection...','#7A5500');
+    const snap=await fb.sdk.getDocs(fb.sdk.collection(fb.db,'students'));
+    const remoteMap=new Map();
+    snap.forEach(d=>remoteMap.set(d.id,d.data()));
+    const missing=[];
+    const different=[];
+    localProfiles.forEach(local=>{
+      const remote=remoteMap.get(local.id);
+      if(!remote){missing.push(local.name);return;}
+      const a=stableStringify(comparableStudentProfile(local));
+      const b=stableStringify(comparableStudentProfile(remote));
+      if(a!==b)different.push(local.name);
+    });
+    const extra=[];
+    remoteMap.forEach((remote,id)=>{
+      if(!localProfiles.some(local=>local.id===id))extra.push(remote?.name||id);
+    });
+    const match=missing.length===0&&different.length===0&&extra.length===0;
+    const lines=[
+      match?'Student profile comparison: MATCH.':'Student profile comparison: DIFFERENCES FOUND.',
+      'Firestore path: students/{studentId}',
+      'Local profiles: '+localProfiles.length,
+      'Firestore profiles: '+remoteMap.size,
+      'Missing in Firestore: '+missing.length,
+      'Different profiles: '+different.length,
+      'Extra Firestore profiles: '+extra.length,
+      'Compared only profile summaries. Detailed XP history, assignment logs, exact grades, and participation challenge state were not compared.'
+    ];
+    if(missing.length)lines.push('Missing sample: '+missing.slice(0,5).join(', '));
+    if(different.length)lines.push('Different sample: '+different.slice(0,5).join(', '));
+    if(extra.length)lines.push('Extra sample: '+extra.slice(0,5).join(', '));
+    setFirebaseStudentsStatus(lines.join('\n'),match?'#1A6B2A':'#7A5500');
+    showEB(match?'Local student profiles match Firestore.':'Student profile comparison found differences.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseStudentsStatus('Student profile comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+    showEB('Student profile comparison failed'+code+'. Check the student migration box.');
   }
 }
 
