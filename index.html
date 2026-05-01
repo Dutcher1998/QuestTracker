@@ -927,6 +927,7 @@ html,body{scroll-behavior:auto;}
               <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
                 <button class="btn bo bsm" onclick="previewRemainingDatabaseMigration()">Preview Remaining Data</button>
                 <button class="btn bm bsm" onclick="uploadRemainingDatabaseDataToFirestore()">Upload Remaining Data</button>
+                <button class="btn bgold bsm" onclick="resyncCoreDatabaseDataToFirestore()">Resync Students + XP Logs</button>
                 <button class="btn bg bsm" onclick="compareAllLocalVsFirestore()">Compare All Local vs Firestore</button>
                 <button class="btn bo bsm" onclick="loadAllFirestoreDataToLocal()">Load Firestore Into Local App</button>
                 <button class="btn bgold bsm" onclick="enableDatabaseModeFlag()">Enable Database Mode Flag</button>
@@ -2483,6 +2484,56 @@ function compareMaps(localList,remoteMap,comparableFn,labelFn){
   });
   remoteMap.forEach((remote,id)=>{if(!localList.some(local=>local.id===id))extra.push(labelFn(remote)||id);});
   return {match:missing.length===0&&different.length===0&&extra.length===0,missing,different,extra,localCount:localList.length,remoteCount:remoteMap.size};
+}
+
+
+async function replaceCollectionFromLocal(collectionName, localList, comparableFn){
+  const fb=getFirebaseObjects();
+  const remoteMap=await getCollectionMap(collectionName);
+  const localIds=new Set(localList.map(item=>String(item.id||'')));
+  const operations=[];
+  remoteMap.forEach((remote,id)=>{
+    if(!localIds.has(String(id)))operations.push({type:'delete',id:String(id)});
+  });
+  localList.forEach(item=>operations.push({type:'set',id:String(item.id||''),item}));
+  for(let i=0;i<operations.length;i+=400){
+    const batch=fb.sdk.writeBatch(fb.db);
+    operations.slice(i,i+400).forEach(op=>{
+      const ref=fb.sdk.doc(fb.db,collectionName,op.id);
+      if(op.type==='delete')batch.delete(ref);
+      else batch.set(ref,{...op.item,updatedAt:fb.sdk.serverTimestamp()},{merge:false});
+    });
+    await batch.commit();
+  }
+  return {localCount:localList.length, oldRemoteCount:remoteMap.size, operations:operations.length};
+}
+
+async function resyncCoreDatabaseDataToFirestore(){
+  try{
+    setFirebaseFullSyncStatus('Core resync: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    sanitizeStoredGradeDetails();
+    const studentProfiles=getLocalStudentProfilesForFirestore();
+    const xpLogs=getLocalXpLogsForFirestore();
+    const msg='Resync Students + XP Logs to Firestore?\n\nThis will make Firestore match the current local app for:\n• '+studentProfiles.length+' student profile summaries\n• '+xpLogs.length+' XP history records\n\nIt will overwrite matching documents and remove stale extra Firestore documents in those two collections only.\n\nSettings, assignments, quests, classes, attendance, and challenge state will not be changed by this button.';
+    if(!confirm(msg))return;
+    setFirebaseFullSyncStatus('Core resync: replacing students/{studentId} from local app...','#7A5500');
+    const sResult=await replaceCollectionFromLocal('students',studentProfiles,comparableStudentProfile);
+    setFirebaseFullSyncStatus('Core resync: replacing xpLogs/{logId} from local app...','#7A5500');
+    const xResult=await replaceCollectionFromLocal('xpLogs',xpLogs,comparableXpLog);
+    setFirebaseFullSyncStatus([
+      'Core resync: SUCCESS.',
+      'students/{studentId}: '+sResult.localCount+' local records written. Previous Firestore count: '+sResult.oldRemoteCount+'.',
+      'xpLogs/{logId}: '+xResult.localCount+' local records written. Previous Firestore count: '+xResult.oldRemoteCount+'.',
+      'Exact grade percentages were not stored.',
+      'Next step: click Compare All Local vs Firestore again.'
+    ].join('\n'),'#1A6B2A');
+    showEB('Students and XP logs resynced to Firestore. Run the full comparison again.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseFullSyncStatus('Core resync FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+    showEB('Core resync failed'+code+'. Check the full sync box.');
+  }
 }
 
 async function compareAllLocalVsFirestore(){
