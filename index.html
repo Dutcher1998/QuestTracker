@@ -921,6 +921,19 @@ html,body{scroll-behavior:auto;}
               </div>
               <div id="firebase-quests-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Quest board migration: not tested yet.</div>
             </div>
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--BDG);">
+              <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Step 15: full remaining database sync prep</div>
+              <div style="font-size:12px;color:var(--INK3);margin-bottom:8px;">This combines the remaining setup: class records, attendance records, current Class Challenge state, a database-mode flag, full Firestore load tools, and final comparison checks. Use <strong>Compare All Local vs Firestore</strong> before turning on database mode.</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <button class="btn bo bsm" onclick="previewRemainingDatabaseMigration()">Preview Remaining Data</button>
+                <button class="btn bm bsm" onclick="uploadRemainingDatabaseDataToFirestore()">Upload Remaining Data</button>
+                <button class="btn bg bsm" onclick="compareAllLocalVsFirestore()">Compare All Local vs Firestore</button>
+                <button class="btn bo bsm" onclick="loadAllFirestoreDataToLocal()">Load Firestore Into Local App</button>
+                <button class="btn bgold bsm" onclick="enableDatabaseModeFlag()">Enable Database Mode Flag</button>
+                <button class="btn bo bsm" onclick="disableDatabaseModeFlag()">Disable Database Mode Flag</button>
+              </div>
+              <div id="firebase-fullsync-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Full database sync prep: not tested yet.</div>
+            </div>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
@@ -2189,6 +2202,449 @@ async function compareLocalVsFirestoreQuests(){
     const code=e?.code?(' ['+e.code+']') : '';
     setFirebaseQuestsStatus('Quest board comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
     showEB('Quest board comparison failed'+code+'. Check the quest migration box.');
+  }
+}
+
+
+
+/* ─────────────────────────────────────────────────────────────
+   Step 15 — full remaining database sync prep
+   Adds classes, attendance, current challenge state, database-mode flag,
+   full comparison, and Firestore-to-local loading tools.
+   ───────────────────────────────────────────────────────────── */
+const QT_DATABASE_MODE_KEY='dq_database_mode_enabled';
+
+function setFirebaseFullSyncStatus(msg,color){
+  const el=document.getElementById('firebase-fullsync-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+}
+
+function isDatabaseModeEnabled(){return localStorage.getItem(QT_DATABASE_MODE_KEY)==='true';}
+
+function normalizeClassForFirestore(className){
+  const name=String(className||'Unassigned');
+  const classStudents=students.filter(s=>String(s.cls||'Unassigned')===name);
+  return {
+    schemaVersion:1,
+    id:safeFirestoreId(name),
+    name,
+    teacherEmail:getCurrentFirebaseEmail()||null,
+    studentCount:classStudents.length,
+    active:true,
+    updatedAtClient:new Date().toISOString(),
+    sourceSystem:'Quest Tracker classes/{classId} Step 15 remaining database sync',
+    containsGrades:false
+  };
+}
+
+function getLocalClassesForFirestore(){
+  return getCls().map(normalizeClassForFirestore).sort((a,b)=>a.name.localeCompare(b.name));
+}
+
+function comparableClass(c){
+  return {
+    schemaVersion:c?.schemaVersion||1,
+    id:String(c?.id||''),
+    name:String(c?.name||''),
+    studentCount:Number(c?.studentCount||0),
+    active:c?.active===true,
+    containsGrades:c?.containsGrades===true
+  };
+}
+
+function getAttendanceDateKey(iso){
+  if(!iso)return 'draft';
+  const d=new Date(iso);
+  if(Number.isNaN(d.getTime()))return 'draft';
+  return d.toISOString().slice(0,10);
+}
+
+function normalizeAttendanceRecordForFirestore(className,state){
+  const name=String(className||'Unassigned');
+  const classId=safeFirestoreId(name);
+  const dateKey=getAttendanceDateKey(state?.date);
+  const absent=[...(state?.absent instanceof Set?state.absent:new Set(state?.absent||[]))].map(String).sort();
+  const classStudents=students.filter(s=>String(s.cls||'Unassigned')===name);
+  const present=classStudents.map(s=>String(s.id)).filter(id=>!absent.includes(id)).sort();
+  return {
+    schemaVersion:1,
+    id:classId+'_'+dateKey,
+    classId,
+    className:name,
+    date:state?.date||null,
+    dateKey,
+    submitted:state?.submitted===true,
+    absentStudentIds:absent,
+    presentStudentIds:present,
+    absentCount:absent.length,
+    presentCount:present.length,
+    teacherEmail:getCurrentFirebaseEmail()||null,
+    updatedAtClient:new Date().toISOString(),
+    sourceSystem:'Quest Tracker attendance/{attendanceId} Step 15 remaining database sync',
+    containsGrades:false
+  };
+}
+
+function getLocalAttendanceForFirestore(){
+  loadAttendance();
+  const records=[];
+  Object.keys(attStates||{}).forEach(cls=>{
+    const state=attStates[cls];
+    if(!state)return;
+    const hasAnything=!!state.date || state.submitted===true || (state.absent&&state.absent.size>0);
+    if(hasAnything)records.push(normalizeAttendanceRecordForFirestore(cls,state));
+  });
+  return records.sort((a,b)=>a.id.localeCompare(b.id));
+}
+
+function comparableAttendanceRecord(a){
+  return {
+    schemaVersion:a?.schemaVersion||1,
+    id:String(a?.id||''),
+    classId:String(a?.classId||''),
+    className:String(a?.className||''),
+    date:a?.date?String(a.date):null,
+    dateKey:String(a?.dateKey||'draft'),
+    submitted:a?.submitted===true,
+    absentStudentIds:[...(a?.absentStudentIds||[])].map(String).sort(),
+    presentStudentIds:[...(a?.presentStudentIds||[])].map(String).sort(),
+    absentCount:Number(a?.absentCount||0),
+    presentCount:Number(a?.presentCount||0),
+    containsGrades:a?.containsGrades===true
+  };
+}
+
+function serializeChallengeStateForFirestore(){
+  const tally={};
+  Object.keys(pcState?.tally||{}).sort().forEach(id=>{tally[id]=Number(pcState.tally[id]||0);});
+  const absent=[...(pcState?.absent instanceof Set?pcState.absent:new Set(pcState?.absent||[]))].map(String).sort();
+  const list=(pcState?.active?getPCList():[]).map(s=>String(s.id)).sort();
+  return {
+    schemaVersion:1,
+    id:'current',
+    active:pcState?.active===true,
+    className:String(pcState?.cls||'All'),
+    needed:Number(pcState?.needed||1),
+    xp:Number(pcState?.xp||25),
+    prize:String(pcState?.prize||''),
+    timerMin:Number(pcState?.timerMin||0),
+    timerEndClient:pcState?.timerEnd||null,
+    tally,
+    absentStudentIds:absent,
+    challengeStudentIds:list,
+    awarded:pcState?.awarded===true,
+    pickerExcludeAbsent:pcState?.pickerExcludeAbsent===true,
+    teacherEmail:getCurrentFirebaseEmail()||null,
+    updatedAtClient:new Date().toISOString(),
+    sourceSystem:'Quest Tracker challengeState/current Step 15 remaining database sync',
+    containsGrades:false
+  };
+}
+
+function comparableChallengeState(c){
+  const tally={};
+  Object.keys(c?.tally||{}).sort().forEach(id=>{tally[id]=Number(c.tally[id]||0);});
+  return {
+    schemaVersion:c?.schemaVersion||1,
+    id:String(c?.id||'current'),
+    active:c?.active===true,
+    className:String(c?.className||'All'),
+    needed:Number(c?.needed||1),
+    xp:Number(c?.xp||25),
+    prize:String(c?.prize||''),
+    timerMin:Number(c?.timerMin||0),
+    tally,
+    absentStudentIds:[...(c?.absentStudentIds||[])].map(String).sort(),
+    challengeStudentIds:[...(c?.challengeStudentIds||[])].map(String).sort(),
+    awarded:c?.awarded===true,
+    pickerExcludeAbsent:c?.pickerExcludeAbsent===true,
+    containsGrades:c?.containsGrades===true
+  };
+}
+
+function makeDatabaseModeMeta(enabled){
+  return {
+    schemaVersion:1,
+    enabled:enabled===true,
+    mode:enabled===true?'enabled':'disabled',
+    teacherEmail:getCurrentFirebaseEmail()||null,
+    updatedAtClient:new Date().toISOString(),
+    note:'Database mode flag only. Local storage remains available as a safety fallback until full live mode is intentionally finalized.',
+    sourceSystem:'Quest Tracker databaseMeta/liveMode Step 15 remaining database sync',
+    containsStudentData:false,
+    containsGrades:false
+  };
+}
+
+async function uploadClassesToFirestore(){
+  const fb=getFirebaseObjects();
+  const localClasses=getLocalClassesForFirestore();
+  const batch=fb.sdk.writeBatch(fb.db);
+  localClasses.forEach(c=>batch.set(fb.sdk.doc(fb.db,'classes',c.id),{...c,updatedAt:fb.sdk.serverTimestamp()},{merge:true}));
+  if(localClasses.length)await batch.commit();
+  return localClasses.length;
+}
+
+async function uploadAttendanceToFirestore(){
+  const fb=getFirebaseObjects();
+  const records=getLocalAttendanceForFirestore();
+  if(!records.length)return 0;
+  const batch=fb.sdk.writeBatch(fb.db);
+  records.forEach(a=>batch.set(fb.sdk.doc(fb.db,'attendance',a.id),{...a,updatedAt:fb.sdk.serverTimestamp()},{merge:true}));
+  await batch.commit();
+  return records.length;
+}
+
+async function uploadChallengeStateToFirestore(){
+  const fb=getFirebaseObjects();
+  const state=serializeChallengeStateForFirestore();
+  await fb.sdk.setDoc(fb.sdk.doc(fb.db,'challengeState','current'),{...state,updatedAt:fb.sdk.serverTimestamp()},{merge:true});
+  return 1;
+}
+
+async function uploadDatabaseModeMetaToFirestore(enabled){
+  const fb=getFirebaseObjects();
+  const meta=makeDatabaseModeMeta(enabled);
+  await fb.sdk.setDoc(fb.sdk.doc(fb.db,'databaseMeta','liveMode'),{...meta,updatedAt:fb.sdk.serverTimestamp()},{merge:true});
+  return 1;
+}
+
+function previewRemainingDatabaseMigration(){
+  try{
+    const classes=getLocalClassesForFirestore();
+    const attendance=getLocalAttendanceForFirestore();
+    const challenge=serializeChallengeStateForFirestore();
+    const lines=[
+      'Remaining database sync preview:',
+      'Will upload to: classes/{classId}, attendance/{attendanceId}, challengeState/current, databaseMeta/liveMode',
+      'Class records ready: '+classes.length,
+      'Attendance records ready: '+attendance.length,
+      'Current challenge active: '+(challenge.active?'yes':'no'),
+      'Current challenge class: '+challenge.className,
+      'Database mode currently: '+(isDatabaseModeEnabled()?'enabled':'disabled'),
+      'This does not store exact grade percentages.',
+      'Use Compare All Local vs Firestore after upload before enabling database mode.'
+    ];
+    setFirebaseFullSyncStatus(lines.join('\n'),'#7A5500');
+  }catch(e){setFirebaseFullSyncStatus('Remaining sync preview FAILED. '+(e?.message||e),'#8B1A1A');}
+}
+
+async function uploadRemainingDatabaseDataToFirestore(){
+  try{
+    setFirebaseFullSyncStatus('Full sync prep: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    const classes=getLocalClassesForFirestore();
+    const attendance=getLocalAttendanceForFirestore();
+    const challenge=serializeChallengeStateForFirestore();
+    const msg='Upload remaining database prep data to Firestore?\n\nThis will upload:\n• '+classes.length+' class records\n• '+attendance.length+' attendance records\n• current Class Challenge state ('+(challenge.active?'active':'inactive')+')\n• database-mode metadata\n\nIt will NOT store exact grade percentages.';
+    if(!confirm(msg))return;
+    setFirebaseFullSyncStatus('Full sync prep: uploading classes...','#7A5500');
+    const classCount=await uploadClassesToFirestore();
+    setFirebaseFullSyncStatus('Full sync prep: uploading attendance...','#7A5500');
+    const attCount=await uploadAttendanceToFirestore();
+    setFirebaseFullSyncStatus('Full sync prep: uploading challenge state...','#7A5500');
+    await uploadChallengeStateToFirestore();
+    setFirebaseFullSyncStatus('Full sync prep: uploading database-mode metadata...','#7A5500');
+    await uploadDatabaseModeMetaToFirestore(isDatabaseModeEnabled());
+    const lines=[
+      'Full sync prep: SUCCESS.',
+      'Uploaded class records: '+classCount,
+      'Uploaded attendance records: '+attCount,
+      'Uploaded challengeState/current: 1',
+      'Uploaded databaseMeta/liveMode: 1',
+      'Exact grade percentages were NOT uploaded.',
+      'Next recommended check: Compare All Local vs Firestore.'
+    ];
+    setFirebaseFullSyncStatus(lines.join('\n'),'#1A6B2A');
+    showEB('Remaining database prep data uploaded to Firestore.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseFullSyncStatus('Full sync prep upload FAILED'+code+'. '+(e?.message||e)+'\n\nIf this says permission-denied, publish the Step 15 rules that allow classes, attendance, challengeState, and databaseMeta.','#8B1A1A');
+    showEB('Remaining database upload failed'+code+'. Check the full sync box.');
+  }
+}
+
+async function getCollectionMap(collectionName){
+  const fb=getFirebaseObjects();
+  const snap=await fb.sdk.getDocs(fb.sdk.collection(fb.db,collectionName));
+  const map=new Map();
+  snap.forEach(d=>map.set(d.id,d.data()));
+  return map;
+}
+
+function compareMaps(localList,remoteMap,comparableFn,labelFn){
+  const missing=[];
+  const different=[];
+  const extra=[];
+  localList.forEach(local=>{
+    const remote=remoteMap.get(local.id);
+    if(!remote){missing.push(labelFn(local));return;}
+    if(stableStringify(comparableFn(local))!==stableStringify(comparableFn(remote)))different.push(labelFn(local));
+  });
+  remoteMap.forEach((remote,id)=>{if(!localList.some(local=>local.id===id))extra.push(labelFn(remote)||id);});
+  return {match:missing.length===0&&different.length===0&&extra.length===0,missing,different,extra,localCount:localList.length,remoteCount:remoteMap.size};
+}
+
+async function compareAllLocalVsFirestore(){
+  try{
+    setFirebaseFullSyncStatus('Full comparison: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    sanitizeStoredGradeDetails();
+    setFirebaseFullSyncStatus('Full comparison: reading Firestore collections...','#7A5500');
+    const fb=getFirebaseObjects();
+    const localSettings=makeGlobalSettingsObject();
+    const remoteSettingsSnap=await fb.sdk.getDoc(fb.sdk.doc(fb.db,'settings','global'));
+    const settingsMatch=remoteSettingsSnap.exists() && stableStringify(comparableGlobalSettings(localSettings))===stableStringify(comparableGlobalSettings(remoteSettingsSnap.data()));
+    const studentsResult=compareMaps(getLocalStudentProfilesForFirestore(),await getCollectionMap('students'),comparableStudentProfile,x=>x.name||x.id);
+    const xpResult=compareMaps(getLocalXpLogsForFirestore(),await getCollectionMap('xpLogs'),comparableXpLog,x=>x.studentName?x.studentName+' — '+x.reason:x.id);
+    const assignmentsResult=compareMaps(getLocalAssignmentAwardsForFirestore(),await getCollectionMap('assignments'),comparableAssignmentAward,x=>x.studentName?x.studentName+' — '+x.submissionKey:x.id);
+    const questsResult=compareMaps(getLocalQuestsForFirestore(),await getCollectionMap('quests'),comparableQuest,x=>x.title||x.id);
+    const classesResult=compareMaps(getLocalClassesForFirestore(),await getCollectionMap('classes'),comparableClass,x=>x.name||x.id);
+    const attendanceResult=compareMaps(getLocalAttendanceForFirestore(),await getCollectionMap('attendance'),comparableAttendanceRecord,x=>x.className?x.className+' — '+x.dateKey:x.id);
+    const remoteChallengeSnap=await fb.sdk.getDoc(fb.sdk.doc(fb.db,'challengeState','current'));
+    const challengeMatch=remoteChallengeSnap.exists() && stableStringify(comparableChallengeState(serializeChallengeStateForFirestore()))===stableStringify(comparableChallengeState(remoteChallengeSnap.data()));
+    const allMatch=settingsMatch&&studentsResult.match&&xpResult.match&&assignmentsResult.match&&questsResult.match&&classesResult.match&&attendanceResult.match&&challengeMatch;
+    const lines=[
+      allMatch?'Full database comparison: MATCH.':'Full database comparison: DIFFERENCES FOUND.',
+      'settings/global: '+(settingsMatch?'MATCH':'DIFFERENT OR MISSING'),
+      'students/{studentId}: '+studentsResult.localCount+' local / '+studentsResult.remoteCount+' Firestore — '+(studentsResult.match?'MATCH':'DIFFERENT'),
+      'xpLogs/{logId}: '+xpResult.localCount+' local / '+xpResult.remoteCount+' Firestore — '+(xpResult.match?'MATCH':'DIFFERENT'),
+      'assignments/{assignmentAwardId}: '+assignmentsResult.localCount+' local / '+assignmentsResult.remoteCount+' Firestore — '+(assignmentsResult.match?'MATCH':'DIFFERENT'),
+      'quests/{questId}: '+questsResult.localCount+' local / '+questsResult.remoteCount+' Firestore — '+(questsResult.match?'MATCH':'DIFFERENT'),
+      'classes/{classId}: '+classesResult.localCount+' local / '+classesResult.remoteCount+' Firestore — '+(classesResult.match?'MATCH':'DIFFERENT'),
+      'attendance/{attendanceId}: '+attendanceResult.localCount+' local / '+attendanceResult.remoteCount+' Firestore — '+(attendanceResult.match?'MATCH':'DIFFERENT'),
+      'challengeState/current: '+(challengeMatch?'MATCH':'DIFFERENT OR MISSING'),
+      'Exact grade percentages were not compared or stored.'
+    ];
+    [studentsResult,xpResult,assignmentsResult,questsResult,classesResult,attendanceResult].forEach((r,idx)=>{
+      const names=['students','xpLogs','assignments','quests','classes','attendance'];
+      if(!r.match)lines.push(names[idx]+' issues: missing '+r.missing.length+', different '+r.different.length+', extra '+r.extra.length+(r.missing[0]?'; sample missing: '+r.missing.slice(0,3).join('; '):''));
+    });
+    setFirebaseFullSyncStatus(lines.join('\n'),allMatch?'#1A6B2A':'#7A5500');
+    showEB(allMatch?'All migrated local data matches Firestore.':'Full comparison found differences. Check the full sync box.');
+    return allMatch;
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseFullSyncStatus('Full comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+    showEB('Full comparison failed'+code+'. Check the full sync box.');
+    return false;
+  }
+}
+
+function firestoreStudentProfileToLocal(d){
+  return {
+    id:String(d.id||''),
+    name:String(d.name||'Unnamed Student'),
+    xp:Number(d.xp||0),
+    lv:Number(d.level||d.lv||1),
+    te:Number(d.totalEarned||d.te||d.xp||0),
+    badges:Array.isArray(d.badges)?clonePlain(d.badges):[],
+    ai:Number(d.avatarIndex||d.ai||0),
+    gid:d.googleId||d.gid||null,
+    cls:String(d.className||d.cls||'General'),
+    pic:d.pictureUrl||d.pic||null,
+    hist:[],
+    seasonBadges:d.seasonBadges&&typeof d.seasonBadges==='object'?clonePlain(d.seasonBadges):{},
+    attendanceDays:Number(d.attendanceDays||0),
+    motto:d.motto||'',
+    avatarIcon:d.avatarIcon||undefined
+  };
+}
+
+async function loadAllFirestoreDataToLocal(){
+  try{
+    setFirebaseFullSyncStatus('Firestore load: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    if(!confirm('Load Firestore data into the local app?\n\nThis will replace local students, settings, quests, XP history, assignment sync records, attendance state, and challenge state with what is currently in Firestore.\n\nMake an encrypted backup first if you are unsure.'))return;
+    const fb=getFirebaseObjects();
+    setFirebaseFullSyncStatus('Firestore load: reading settings...','#7A5500');
+    const settingsSnap=await fb.sdk.getDoc(fb.sdk.doc(fb.db,'settings','global'));
+    if(settingsSnap.exists())applyGlobalSettingsObject(settingsSnap.data());
+    setFirebaseFullSyncStatus('Firestore load: reading student profiles...','#7A5500');
+    const studentMap=await getCollectionMap('students');
+    students=[...studentMap.values()].map(firestoreStudentProfileToLocal).sort((a,b)=>a.name.localeCompare(b.name));
+    setFirebaseFullSyncStatus('Firestore load: reading XP logs...','#7A5500');
+    const xpMap=await getCollectionMap('xpLogs');
+    const histByStudent={};
+    [...xpMap.values()].forEach(x=>{
+      const sid=String(x.studentId||'');
+      if(!sid)return;
+      if(!histByStudent[sid])histByStudent[sid]=[];
+      histByStudent[sid].push({amt:Number(x.amount||0),reason:String(x.reason||''),time:String(x.time||''),date:String(x.date||'')});
+    });
+    students.forEach(s=>{s.hist=(histByStudent[s.id]||[]).slice(0,200);});
+    setFirebaseFullSyncStatus('Firestore load: reading quests and assignment sync records...','#7A5500');
+    const questMap=await getCollectionMap('quests');
+    quests=[...questMap.values()].sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0)).map(q=>({id:q.id,title:q.title,desc:q.description,icon:q.icon,xp:q.xp,deadline:q.deadline}));
+    const assignMap=await getCollectionMap('assignments');
+    awardedSubmissions={};
+    [...assignMap.values()].forEach(a=>{
+      if(a.submissionKey){
+        awardedSubmissions[a.submissionKey]=a.status==='awarded'||a.preventsDoubleAwarding===true||a.submitted===true;
+        awardedSubmissions[a.submissionKey+'_xp']=Number(a.xpAwardedTotal||0);
+      }
+    });
+    setFirebaseFullSyncStatus('Firestore load: reading attendance and challenge state...','#7A5500');
+    const attMap=await getCollectionMap('attendance');
+    attStates={};
+    [...attMap.values()].forEach(a=>{
+      const cls=String(a.className||'Unassigned');
+      attStates[cls]={date:a.date||null,absent:new Set(a.absentStudentIds||[]),submitted:a.submitted===true};
+    });
+    saveAttendance();
+    const chSnap=await fb.sdk.getDoc(fb.sdk.doc(fb.db,'challengeState','current'));
+    if(chSnap.exists()){
+      const c=chSnap.data();
+      pcState.active=c.active===true;
+      pcState.cls=String(c.className||'All');
+      pcState.needed=Number(c.needed||1);
+      pcState.xp=Number(c.xp||25);
+      pcState.prize=String(c.prize||'');
+      pcState.timerMin=Number(c.timerMin||0);
+      pcState.timerEnd=c.timerEndClient||null;
+      pcState.tally=clonePlain(c.tally||{});
+      pcState.absent=new Set(c.absentStudentIds||[]);
+      pcState.awarded=c.awarded===true;
+      pcState.pickerExcludeAbsent=c.pickerExcludeAbsent===true;
+      syncPCState();
+    }
+    sanitizeStoredGradeDetails();
+    save();saveAttendance();render();renderAttendance();renderParticipationSetup();
+    setFirebaseFullSyncStatus('Firestore load: SUCCESS. Local app was refreshed from Firestore. Local storage still remains as a safety cache.','#1A6B2A');
+    showEB('Firestore data loaded into the local app.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseFullSyncStatus('Firestore load FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+    showEB('Firestore load failed'+code+'. Check the full sync box.');
+  }
+}
+
+async function enableDatabaseModeFlag(){
+  try{
+    setFirebaseFullSyncStatus('Database mode: checking comparison before enabling...','#7A5500');
+    const ok=await compareAllLocalVsFirestore();
+    if(!ok){showEB('Database mode was not enabled because the full comparison did not match.');return;}
+    if(!confirm('Enable the Database Mode flag?\n\nThis marks the app as database-ready and records the flag in Firestore. Local storage remains as a safety fallback in this build.'))return;
+    localStorage.setItem(QT_DATABASE_MODE_KEY,'true');
+    await uploadDatabaseModeMetaToFirestore(true);
+    setFirebaseFullSyncStatus('Database Mode flag: ENABLED. Firestore comparison matched before enabling. Local storage remains as a safety fallback in this build.','#1A6B2A');
+    showEB('Database Mode flag enabled.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseFullSyncStatus('Enable Database Mode FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+  }
+}
+
+async function disableDatabaseModeFlag(){
+  try{
+    await ensureApprovedFirebaseTeacher();
+    localStorage.setItem(QT_DATABASE_MODE_KEY,'false');
+    await uploadDatabaseModeMetaToFirestore(false);
+    setFirebaseFullSyncStatus('Database Mode flag: DISABLED. The app is using local storage as its active source of truth.','#7A5500');
+    showEB('Database Mode flag disabled.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseFullSyncStatus('Disable Database Mode FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
   }
 }
 
