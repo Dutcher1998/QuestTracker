@@ -1963,6 +1963,52 @@ function downloadTextFile(filename,text,mime){
   },10*60*1000);
   return url;
 }
+
+function showBackupReadyModal(filename,text){
+  let mo=document.getElementById('BACKUP-READY-MO');
+  if(!mo){
+    mo=document.createElement('div');
+    mo.id='BACKUP-READY-MO';
+    mo.className='mo';
+    mo.style.zIndex='700';
+    document.body.appendChild(mo);
+  }
+  window._qtPendingBackup={filename,text};
+  mo.innerHTML=`<div class="md" style="max-width:520px;">
+    <div class="mh"><h2>Encrypted Backup Ready</h2><button class="mc" onclick="document.getElementById('BACKUP-READY-MO').style.display='none'">×</button></div>
+    <div class="mb">
+      <p style="font-size:15px;color:var(--INK3);line-height:1.5;margin-bottom:1rem;">Your encrypted backup has been created. Click the button below to save it. This extra click helps browsers allow the download after encryption finishes.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:1rem;">
+        <button class="btn bm" onclick="downloadPendingBackup()">⬇️ Download Backup</button>
+        <button class="btn bo" onclick="copyPendingBackup()">Copy Backup Text</button>
+      </div>
+      <div style="font-size:12px;color:var(--GM);text-align:center;">File name: ${filename}</div>
+    </div>
+  </div>`;
+  mo.style.display='flex';
+}
+
+function downloadPendingBackup(){
+  const b=window._qtPendingBackup;
+  if(!b){showEB('No backup is ready to download.');return;}
+  downloadTextFile(b.filename,b.text,'application/json;charset=utf-8');
+  const mo=document.getElementById('BACKUP-READY-MO');
+  if(mo)mo.style.display='none';
+  showEB('Encrypted backup download started.');
+}
+
+async function copyPendingBackup(){
+  const b=window._qtPendingBackup;
+  if(!b){showEB('No backup is ready to copy.');return;}
+  try{
+    await navigator.clipboard.writeText(b.text);
+    showEB('Encrypted backup text copied. Paste it into a text file and save it as .qtbackup if download is blocked.');
+  }catch(e){
+    const ta=document.createElement('textarea');
+    ta.value=b.text;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    showEB('Encrypted backup text copied. Paste it into a text file and save it as .qtbackup if download is blocked.');
+  }
+}
 function restoreBackupData(data){
   if(!data.students||!Array.isArray(data.students)){showEB('Invalid backup file.');return false;}
   if(!confirm(`Import backup from ${data.timestamp||'unknown date'}? This has ${data.students.length} students. Current data will be overwritten.`))return false;
@@ -1991,10 +2037,12 @@ async function exportBackup(){
     await new Promise(resolve=>setTimeout(resolve,30));
     const backup=makeBackupObject();
     const encrypted=await encryptBackupObject(backup,pass);
-    downloadTextFile('QuestTracker-Backup-'+new Date().toISOString().slice(0,10)+'.qtbackup',JSON.stringify(encrypted,null,2),'application/json;charset=utf-8');
+    const filename='QuestTracker-Backup-'+new Date().toISOString().slice(0,10)+'.qtbackup';
+    const text=JSON.stringify(encrypted,null,2);
+    showBackupReadyModal(filename,text);
     save();
     localStorage.setItem('dq_lastbackup',Date.now().toString());
-    showEB('Encrypted backup created. If it did not download automatically, use the gold manual download link at the bottom of the screen.');
+    showEB('Encrypted backup created. Click Download Backup in the popup.');
   }catch(err){showEB('Error creating encrypted backup: '+err.message);}
 }
 
@@ -2047,14 +2095,12 @@ function randomStudentPicker(){
   if(filterAbsent&&attState&&attState.absent){
     pool=pool.filter(s=>!attState.absent.has(s.id));
   }
-  // Optionally exclude students who already participated (in current challenge)
+  // During an active challenge, automatically exclude students who have already met the participation requirement.
+  // This keeps the picker focused on students who still need to participate without prompting each time.
   if(pcState.active&&pcState.cls===cls){
-    const filterParticipated=confirm('Exclude students who already participated in the current challenge?');
-    if(filterParticipated){
-      pool=pool.filter(s=>!((pcState.tally[s.id]||0)>=pcState.needed));
-    }
+    pool=pool.filter(s=>!((pcState.tally[s.id]||0)>=pcState.needed));
   }
-  if(!pool.length){showEB('No eligible students to pick from.');return;}
+  if(!pool.length){showEB(pcState.active&&pcState.cls===cls?'No eligible students left — everyone present has met the participation requirement.':'No eligible students to pick from.');return;}
   // Animate the picker
   let mo=document.getElementById('PICKER-MO');
   if(!mo){mo=document.createElement('div');mo.id='PICKER-MO';mo.className='mo';mo.style.zIndex='600';mo.onclick=e=>{if(e.target===mo)mo.style.display='none';};document.body.appendChild(mo);}
