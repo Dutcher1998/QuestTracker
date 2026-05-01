@@ -9,9 +9,9 @@
 <style>
 :root{
   --M:#6B1A2A;--MD:#3D0A14;--ML:#8B2A3E;--MP:#F8EDEF;
-  --G:#5A5A5A;--GL:#E8E8E8;--GP:#F2F2F2;--GM:#888;
+  --G:#5A5A5A;--GL:#E8E8E8;--GP:#F2F2F2;--GM:#666;
   --W:#FFFFFF;--GO:#C9923A;--GOL:#E8C97A;--GOP:#FDF6E8;
-  --INK:#1A1A1A;--INK3:#666;
+  --INK:#1A1A1A;--INK3:#444;
   --BD:rgba(107,26,42,0.15);--BDG:rgba(0,0,0,0.09);
   --R:10px;--RL:16px;--SH:rgba(107,26,42,0.1);
 }
@@ -522,7 +522,22 @@ html,body{scroll-behavior:auto;}
         <button class="btn bm" onclick="addStudent()">Add</button>
         <button class="btn bo bsm" onclick="syncGC()">Sync All Classes</button>
       </div>
-      <div class="sl">Students</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+        <div class="sl" style="margin-bottom:0;">Students</div>
+        <input class="fi" id="roster-search" type="text" placeholder="🔍 Search students..." oninput="renderRoster()" style="flex:1;min-width:160px;"/>
+        <select class="fi" id="roster-sort" onchange="renderRoster()" style="width:130px;">
+          <option value="name-asc">Name A–Z</option>
+          <option value="name-desc">Name Z–A</option>
+          <option value="xp-desc">XP High–Low</option>
+          <option value="xp-asc">XP Low–High</option>
+          <option value="level-desc">Level High–Low</option>
+          <option value="level-asc">Level Low–High</option>
+          <option value="attend-desc">Attendance High–Low</option>
+        </select>
+        <select class="fi" id="roster-rank-filter" onchange="renderRoster()" style="width:130px;">
+          <option value="">All Ranks</option>
+        </select>
+      </div>
       <div class="sg" id="sg-r"></div>
     </div>
 
@@ -660,6 +675,13 @@ html,body{scroll-behavior:auto;}
           <button class="btn bgold" onclick="awardChallengeXP()">🏆 Award XP to All</button>
         </div>
       </div>
+      <div class="aws">
+        <h3>🎲 Classroom Tools</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn bg bsm" onclick="randomStudentPicker()">🎲 Random Student</button>
+          <button class="btn bg bsm" onclick="openTeamGenerator()">👥 Team Generator</button>
+        </div>
+      </div>
     </div>
     <!-- ATTENDANCE -->
     <div class="pnl" id="pnl-attendance">
@@ -777,7 +799,7 @@ html,body{scroll-behavior:auto;}
         <h3>XP required per level</h3>
         <p style="font-size:13px;color:var(--INK3);margin-bottom:10px;">This table shows exactly how much XP is needed to reach each level and the total cumulative XP required.</p>
         <div style="overflow-x:auto;">
-          <table class="st2" id="xp-level-table" style="min-width:400px;">
+          <div id="xp-level-table"></div>
             <thead><tr><th>Level</th><th>Rank</th><th>XP needed for this level</th><th>Total cumulative XP</th></tr></thead>
             <tbody id="xp-level-tbody"></tbody>
           </table>
@@ -792,7 +814,7 @@ html,body{scroll-behavior:auto;}
         <h3>Privileges — edit rewards by level</h3>
         <div class="pe" id="pe"></div>
         <div class="par">
-          <input class="fi" id="npl" type="number" min="1" max="20" placeholder="Lv" style="width:72px;"/>
+          <input class="fi" id="npl" type="number" min="1" max="99" placeholder="Lv" style="width:72px;"/>
           <input class="fi" id="npt" type="text" placeholder="Reward description..." style="flex:1;"/>
           <button class="btn bm" onclick="addPriv()">Add</button>
         </div>
@@ -819,25 +841,20 @@ html,body{scroll-behavior:auto;}
           </div>
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
           <div>
-            <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Clear profile pictures</div>
-            <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Wipes all cached profile photos. Re-sync Google Classroom to re-fetch them.</div>
-            <button class="btn bo bsm" onclick="clearPics()">Clear all photos</button>
-          </div>
-          <hr style="border:none;border-top:1px solid var(--BDG);"/>
-          <div>
-            <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Re-fetch profile photos</div>
-            <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Attempts to re-fetch profile photos for all synced students using the current Google session.</div>
-            <button class="btn bg bsm" onclick="refetchPhotos()">Re-fetch photos</button>
-          </div>
-          <hr style="border:none;border-top:1px solid var(--BDG);"/>
-          <div>
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Re-run setup wizard</div>
             <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Reopens the first-time setup wizard to reconfigure Google Classroom, marking periods, and XP categories.</div>
             <button class="btn bg bsm" onclick="localStorage.removeItem('dq_setup_done');window._wizardWaiting=false;openSetupWizard();">↩ Open Setup Wizard</button>
           </div>
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
           <div>
-            <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Full session reset</div>
+            <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Backup &amp; Restore</div>
+          <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Export all data as a JSON file. Import to restore on any device or after clearing browser storage.</div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <button class="btn bm bsm" onclick="exportBackup()">⬇️ Export Backup</button>
+            <button class="btn bo bsm" onclick="importBackup()">⬆️ Import Backup</button>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--BDG);"/>
+          <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Full session reset</div>
             <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Clears ALL data — roster, XP, settings, saved periods, attendance — and signs you out. Use to start completely fresh as a new user.</div>
             <button class="btn bd" onclick="fullSessionReset()">🗑️ Reset Everything</button>
           </div>
@@ -985,7 +1002,11 @@ function isStudentEmail(email){
   return STUDENT_DOMAINS.includes(domain);
 }
 
-const LVS=(()=>{const t=[0];for(let i=1;i<=20;i++)t.push(t[i-1]+Math.round(50*Math.pow(i,1.8)));return t;})();
+function getMaxLevel(){return Math.max(20,...RANKS.map(r=>r.max));}
+function buildLVS(){const mx=getMaxLevel();const t=[0];for(let i=1;i<=mx;i++)t.push(t[i-1]+Math.round(50*Math.pow(i,1.8)));return t;}
+function loadCustomXP(){try{const s=localStorage.getItem('dq_xptable');if(s)return JSON.parse(s);}catch(e){}return null;}
+function saveCustomXP(t){localStorage.setItem('dq_xptable',JSON.stringify(t));}
+let LVS;// initialized after RANKS loads
 const RANKS_DEFAULT=[
   {min:1,max:4,name:'Recruit',icon:'🛡️',color:'#5A5A5A',bg:'#F2F2F2',bar:'#9A9A9A'},
   {min:5,max:9,name:'Soldier',icon:'⚔️',color:'#5A3A6B',bg:'#F0EAF5',bar:'#9A7AB0'},
@@ -998,6 +1019,8 @@ function loadRanks(){
 }
 function saveRanks(){localStorage.setItem('dq_ranks',JSON.stringify(RANKS));}
 let RANKS=loadRanks();
+LVS=loadCustomXP()||buildLVS();// now safe — RANKS is defined
+function rebuildLVS(){LVS=loadCustomXP()||buildLVS();}
 const BADGES=[
   {id:'sl',label:'Soldier',desc:'Reached Soldier',icon:'⚔️',chk:s=>s.lv>=5,bg:'#F0EAF5',tx:'#5A3A6B'},
   {id:'cp',label:'Captain',desc:'Reached Captain',icon:'🎖️',chk:s=>s.lv>=10,bg:'#F8EDEF',tx:'#6B1A2A'},
@@ -1100,13 +1123,14 @@ let seasonRewards={
 let selIds=new Set(),curUser=null,isT=false,curSid=null,gcToken=null,tclient=null;
 let rcls='All',acls='All',lcls='All',pvcls='All';
 let teachingMode=false;// declared early so renderLB can reference it
+const DATA_VERSION=2;// bump when data format changes
 let undoStack=null,undoTimer=null;
 let luQueue=[];
 
 function mkS(name,idx,cls){return{id:'s'+Date.now()+Math.random(),name,xp:0,lv:1,te:0,badges:[],ai:idx%AVC.length,gid:null,cls:cls||'General',pic:null,hist:[],seasonBadges:{},attendanceDays:0};}
 function getCls(){return[...new Set(students.map(s=>s.cls).filter(Boolean))].sort();}
 function getRank(lv){return RANKS.find(r=>lv>=r.min&&lv<=r.max)||RANKS[0];}
-function lvFromXP(xp){let l=1;for(let i=1;i<=20;i++){if(xp>=LVS[i])l=i+1;else break;}return Math.min(l,20);}
+function lvFromXP(xp){const mx=getMaxLevel();let l=1;for(let i=1;i<LVS.length;i++){if(xp>=LVS[i])l=i+1;else break;}return Math.min(l,mx);}
 function xpIn(s){return s.xp-LVS[s.lv-1];}
 function xpNeed(lv){return LVS[lv]-LVS[lv-1];}
 function pct(s){if(s.lv>=20)return 100;return Math.round((xpIn(s)/xpNeed(s.lv))*100);}
@@ -1355,11 +1379,32 @@ function updClassSel(){
 
 function renderRoster(){
   updHero();renderPills('cp-r',rcls,'setRC');updClassSel();
-  // Render rank summary bar using current RANKS
   const rb=document.getElementById('rank-summary-bar');
-  if(rb)rb.innerHTML=RANKS.map(r=>`<div class="rc" style="background:${r.bg};border-color:${r.bar};"><div class="rci">${r.icon}</div><div class="rcn" style="color:${r.color};">${r.name}</div><div class="rcr" style="color:${r.color};">Lv ${r.min}–${r.max}</div></div>`).join('');
-  const list=filt(rcls);
-  document.getElementById('sg-r').innerHTML=list.length?list.map(s=>sCard(s,false)).join(''):`<p style="font-size:13px;color:var(--INK3);grid-column:1/-1;">No students in this class.</p>`;
+  if(rb)rb.innerHTML=RANKS.map(r=>`<div class="rc" style="background:${r.bg};border-color:${r.bar};"><div class="rci">${r.icon}</div><div class="rcn" style="color:${r.color};">${r.name}</div><div class="rcr" style="color:${r.color};">Lv ${r.min}\u2013${r.max}</div></div>`).join('');
+  // Populate rank filter dropdown dynamically
+  const rkFilter=document.getElementById('roster-rank-filter');
+  if(rkFilter){
+    const curVal=rkFilter.value;
+    rkFilter.innerHTML='<option value="">All Ranks</option>'+RANKS.map(r=>`<option value="${r.name}">${r.icon} ${r.name}</option>`).join('');
+    rkFilter.value=curVal;
+  }
+  let list=filt(rcls);
+  // Search filter
+  const q=(document.getElementById('roster-search')?.value||'').toLowerCase().trim();
+  if(q)list=list.filter(s=>s.name.toLowerCase().includes(q));
+  // Rank filter
+  const rkf=document.getElementById('roster-rank-filter')?.value||'';
+  if(rkf)list=list.filter(s=>getRank(s.lv).name===rkf);
+  // Sort
+  const sort=document.getElementById('roster-sort')?.value||'name-asc';
+  if(sort==='name-asc')list.sort((a,b)=>a.name.localeCompare(b.name));
+  else if(sort==='name-desc')list.sort((a,b)=>b.name.localeCompare(a.name));
+  else if(sort==='xp-desc')list.sort((a,b)=>b.xp-a.xp);
+  else if(sort==='xp-asc')list.sort((a,b)=>a.xp-b.xp);
+  else if(sort==='level-desc')list.sort((a,b)=>b.lv-a.lv);
+  else if(sort==='level-asc')list.sort((a,b)=>a.lv-b.lv);
+  else if(sort==='attend-desc')list.sort((a,b)=>(b.attendanceDays||0)-(a.attendanceDays||0));
+  document.getElementById('sg-r').innerHTML=list.length?list.map(s=>sCard(s,false)).join(''):`<p style="font-size:13px;color:var(--INK3);grid-column:1/-1;">No students found.</p>`;
 }
 function renderAwardGrid(){
   renderPills('cp-a',acls,'setAC');
@@ -1572,7 +1617,7 @@ function renderPrivEditor(){
   const sp=[...privs].sort((a,b)=>a.level-b.level);
   document.getElementById('pe').innerHTML=sp.map((p,i)=>`
     <div class="pr">
-      <input class="fi" type="number" min="1" max="20" value="${p.level}" onchange="updPL(${i},this.value)" style="width:65px;"/>
+      <input class="fi" type="number" min="1" max="99" value="${p.level}" onchange="updPL(${i},this.value)" style="width:65px;"/>
       <input class="fi" type="text" value="${p.text}" onchange="updPT(${i},this.value)" style="flex:1;"/>
       <button class="btn bd bxs" onclick="rmPriv(${i})">Remove</button>
     </div>`).join('');
@@ -1604,19 +1649,44 @@ function renderSeasonRewards(){
 }
 
 function renderXPLevelTable(){
-  const tb=document.getElementById('xp-level-tbody');if(!tb)return;
-  tb.innerHTML=Array.from({length:20},(_,i)=>{
-    const lv=i+1;
-    const rk=getRank(lv);
-    const needed=lv===1?LVS[1]:LVS[lv]-LVS[lv-1];
-    const total=LVS[lv];
-    return`<tr style="background:${lv%2===0?'var(--GP)':'var(--W)'};">
-      <td style="font-family:'Cinzel',serif;font-weight:600;color:var(--M);">Lv ${lv}</td>
-      <td><span style="background:${rk.bg};color:${rk.color};padding:2px 8px;border-radius:20px;font-size:11px;">${rk.icon} ${rk.name}</span></td>
-      <td style="font-family:'Cinzel',serif;">${needed.toLocaleString()} XP</td>
-      <td style="color:var(--INK3);">${lv>=20?'—':total.toLocaleString()+' XP total'}</td>
-    </tr>`;
-  }).join('');
+  const el=document.getElementById('xp-level-table');if(!el)return;
+  const mx=getMaxLevel();
+  while(LVS.length<=mx)LVS.push(LVS[LVS.length-1]+Math.round(50*Math.pow(LVS.length,1.8)));
+  var rows='';
+  for(var li=1;li<=mx;li++){
+    var total=LVS[li]||0;
+    var prev=LVS[li-1]||0;
+    var needed=total-prev;
+    rows+='<tr><td style="font-family:Cinzel,serif;color:var(--M);font-weight:600;">'+li+'</td>';
+    rows+='<td><input class="fi" type="number" value="'+needed+'" min="1" style="width:100px;text-align:center;" onchange="updateXPLevel('+li+',parseInt(this.value)||0)"/></td>';
+    rows+='<td style="color:var(--INK3);">'+total.toLocaleString()+'</td></tr>';
+  }
+  el.innerHTML='<div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Edit XP required per level. Changes save automatically.</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:10px;"><button class="btn bo bsm" onclick="resetXPTable()">Reset to defaults</button></div>'
+    +'<div style="max-height:340px;overflow-y:auto;"><table class="st2"><tr><th>Level</th><th>XP to Level Up</th><th>Cumulative XP</th></tr>'
+    +rows+'</table></div>';
+}
+
+function updateXPLevel(lv,val,type){
+  if(val<1)val=1;
+  const prev=LVS[lv-1]||0;
+  LVS[lv]=prev+val;
+  // Cascade: recalculate all levels above this one to maintain consistency
+  const mx=getMaxLevel();
+  for(let i=lv+1;i<=mx;i++){
+    const oldNeeded=(LVS[i]||0)-(LVS[i-1]||0);
+    if(oldNeeded<1)LVS[i]=LVS[i-1]+Math.round(50*Math.pow(i,1.8));
+  }
+  saveCustomXP(LVS);
+  renderXPLevelTable();
+}
+
+function resetXPTable(){
+  if(!confirm('Reset XP table to default formula?'))return;
+  localStorage.removeItem('dq_xptable');
+  LVS=buildLVS();
+  render();renderXPLevelTable();
+  showEB('XP table reset to defaults.');
 }
 
 /* QUEST FUNCTIONS */
@@ -1748,6 +1818,175 @@ function fullSessionReset(){
   showEB('All data cleared. Reloading...');
   setTimeout(()=>location.reload(),1000);
 }
+
+function exportBackup(){
+  const backup={
+    version:DATA_VERSION,
+    timestamp:new Date().toISOString(),
+    students:students,log:log,privs:privs,acts:acts,quests:quests,
+    customBadges:customBadges,xpCategories:xpCategories,
+    awardedSubmissions:awardedSubmissions,autoAwardLog:autoAwardLog,
+    seasonRewards:seasonRewards,savedPeriods:savedPeriods,
+    RANKS:RANKS,LVS:LVS
+  };
+  const json=JSON.stringify(backup,null,2);
+  const blob=new Blob([json],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='QuestTracker-Backup-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  localStorage.setItem('dq_lastbackup',Date.now().toString());
+  showEB('Backup exported successfully.');
+}
+
+function importBackup(){
+  const input=document.createElement('input');input.type='file';input.accept='.json';
+  input.onchange=e=>{
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const data=JSON.parse(ev.target.result);
+        if(!data.students||!Array.isArray(data.students)){showEB('Invalid backup file.');return;}
+        if(!confirm(`Import backup from ${data.timestamp||'unknown date'}? This has ${data.students.length} students. Current data will be overwritten.`))return;
+        students=data.students||[];log=data.log||[];privs=data.privs||[];
+        acts=data.acts||[];quests=data.quests||[];customBadges=data.customBadges||[];
+        xpCategories=data.xpCategories||[];awardedSubmissions=data.awardedSubmissions||{};
+        autoAwardLog=data.autoAwardLog||[];seasonRewards=data.seasonRewards||{};
+        savedPeriods=data.savedPeriods||[];
+        if(data.RANKS&&data.RANKS.length)RANKS=data.RANKS;
+        if(data.LVS&&data.LVS.length){LVS=data.LVS;saveCustomXP(LVS);}
+        saveRanks();save();savePeriods();render();
+        showEB(`Backup restored: ${students.length} students imported.`);
+      }catch(err){showEB('Error reading backup file: '+err.message);}
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function checkBackupReminder(){
+  const last=localStorage.getItem('dq_lastbackup');
+  if(!last)return;
+  const daysSince=Math.floor((Date.now()-parseInt(last))/(1000*60*60*24));
+  if(daysSince>=7){
+    setTimeout(()=>showEB(`⚠️ It has been ${daysSince} days since your last backup. Go to Settings → Export Backup to save your data.`),3000);
+  }
+}
+function randomStudentPicker(){
+  const cls=acls;
+  let pool=filt(cls);
+  // Optionally filter out absent students (from current attendance state)
+  const attState=attStates[cls];
+  const filterAbsent=confirm('Exclude absent students?');
+  if(filterAbsent&&attState&&attState.absent){
+    pool=pool.filter(s=>!attState.absent.has(s.id));
+  }
+  // Optionally exclude students who already participated (in current challenge)
+  if(pcState.active&&pcState.cls===cls){
+    const filterParticipated=confirm('Exclude students who already participated in the current challenge?');
+    if(filterParticipated){
+      pool=pool.filter(s=>!((pcState.tally[s.id]||0)>=pcState.needed));
+    }
+  }
+  if(!pool.length){showEB('No eligible students to pick from.');return;}
+  // Animate the picker
+  let mo=document.getElementById('PICKER-MO');
+  if(!mo){mo=document.createElement('div');mo.id='PICKER-MO';mo.className='mo';mo.style.zIndex='600';mo.onclick=e=>{if(e.target===mo)mo.style.display='none';};document.body.appendChild(mo);}
+  const picked=pool[Math.floor(Math.random()*pool.length)];
+  const rk=getRank(picked.lv);
+  mo.innerHTML=`<div class="md" style="max-width:400px;">
+    <div class="mh" style="justify-content:center;flex-direction:column;gap:8px;text-align:center;padding:2rem;">
+      <div style="font-size:48px;">🎲</div>
+      <h2>Random Student</h2>
+    </div>
+    <div class="mb" style="text-align:center;">
+      <div style="font-size:64px;margin-bottom:8px;animation:luPop .5s ease-out;">🎉</div>
+      <div style="font-family:'Cinzel',serif;font-size:28px;color:var(--MD);margin-bottom:8px;">${picked.name}</div>
+      <div style="font-size:16px;color:var(--INK3);">${rk.icon} ${rk.name} · Level ${picked.lv}</div>
+      <div style="margin-top:1.5rem;display:flex;gap:8px;justify-content:center;">
+        <button class="btn bm" onclick="randomStudentPicker();document.getElementById('PICKER-MO').style.display='none';">🎲 Pick Again</button>
+        <button class="btn bo" onclick="document.getElementById('PICKER-MO').style.display='none'">Close</button>
+      </div>
+    </div>
+  </div>`;
+  mo.style.display='flex';
+}
+
+function openTeamGenerator(){
+  let mo=document.getElementById('TEAM-MO');
+  if(!mo){mo=document.createElement('div');mo.id='TEAM-MO';mo.className='mo';mo.style.zIndex='600';mo.onclick=e=>{if(e.target===mo)mo.style.display='none';};document.body.appendChild(mo);}
+  const cls=acls;
+  const pool=filt(cls);
+  if(!pool.length){showEB('No students in the selected class.');return;}
+  mo.innerHTML=`<div class="md" style="max-width:520px;">
+    <div class="mh"><h2>👥 Team Generator</h2><button class="mc" onclick="document.getElementById('TEAM-MO').style.display='none'">✕</button></div>
+    <div class="mb">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+        <div>
+          <div class="sl" style="margin-bottom:4px;">Number of teams</div>
+          <select class="fi" id="team-count">${[2,3,4,5,6,7,8].map(n=>`<option value="${n}">${n} teams</option>`).join('')}</select>
+        </div>
+        <div>
+          <div class="sl" style="margin-bottom:4px;">Balance by</div>
+          <select class="fi" id="team-method">
+            <option value="random">Random</option>
+            <option value="level">Level (balanced)</option>
+            <option value="xp">XP (balanced)</option>
+          </select>
+        </div>
+        <button class="btn bm" onclick="generateTeams()" style="margin-top:18px;">Generate</button>
+      </div>
+      <div id="team-results"></div>
+    </div>
+  </div>`;
+  mo.style.display='flex';
+}
+
+function generateTeams(){
+  const cls=acls;
+  let pool=[...filt(cls)];
+  const numTeams=parseInt(document.getElementById('team-count').value)||2;
+  const method=document.getElementById('team-method').value;
+  
+  if(method==='level')pool.sort((a,b)=>b.lv-a.lv);
+  else if(method==='xp')pool.sort((a,b)=>b.xp-a.xp);
+  else{// Shuffle randomly
+    for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+  }
+
+  const teams=Array.from({length:numTeams},()=>[]);
+  if(method==='random'){
+    pool.forEach((s,i)=>teams[i%numTeams].push(s));
+  } else {
+    // Snake draft for balanced distribution
+    let dir=1,idx=0;
+    pool.forEach(s=>{
+      teams[idx].push(s);
+      idx+=dir;
+      if(idx>=numTeams){dir=-1;idx=numTeams-1;}
+      else if(idx<0){dir=1;idx=0;}
+    });
+  }
+
+  const colors=['#6B1A2A','#5A3A6B','#1A6B2A','#3A5A8B','#8B6A1A','#1A8B8B','#8B1A6B','#4A6B1A'];
+  const el=document.getElementById('team-results');
+  el.innerHTML=teams.map((t,i)=>{
+    const avgLv=t.length?Math.round(t.reduce((a,s)=>a+s.lv,0)/t.length*10)/10:0;
+    return`<div style="margin-bottom:12px;">
+      <div style="font-family:'Cinzel',serif;font-size:13px;color:${colors[i%colors.length]};margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid ${colors[i%colors.length]};">Team ${i+1} <span style="font-size:11px;color:var(--GM);">(${t.length} students, avg Lv ${avgLv})</span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">${t.map(s=>{
+        const rk=getRank(s.lv);
+        return`<span style="font-size:13px;padding:4px 10px;background:var(--GP);border-radius:20px;border:1px solid var(--BDG);">${rk.icon} ${s.name.split(' ')[0]} <span style="color:var(--GM);">Lv${s.lv}</span></span>`;
+      }).join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+
+
+
 
 function clearRoster(){
   if(!confirm('This will remove ALL students, XP history, and the event log. Cannot be undone. Continue?'))return;
@@ -1883,7 +2122,7 @@ function openM(id){
 }
 function adjLv(id,d){
   const s=students.find(x=>x.id==id);if(!s)return;
-  const nl=Math.max(1,Math.min(20,s.lv+d));
+  const nl=Math.max(1,Math.min(getMaxLevel(),s.lv+d));
   s.lv=nl;s.xp=LVS[nl-1];chkBadges(s);
   addLog(`${s.name} level set to ${nl}.`,'event');save();render();
   const el=document.getElementById('lv2-'+id);if(el)el.textContent=nl;
@@ -2106,7 +2345,7 @@ function renderSV(){
             <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--BDG);font-family:'Cinzel',serif;font-size:10px;letter-spacing:.5px;color:var(--G);">XP to reach</th>
             <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--BDG);font-family:'Cinzel',serif;font-size:10px;letter-spacing:.5px;color:var(--G);">Status</th>
           </tr></thead>
-          <tbody>${Array.from({length:20},(_,i)=>{
+          <tbody>${Array.from({length:getMaxLevel()},(_,i)=>{
             const lv=i+1;const rk=getRank(lv);
             const needed=lv===1?LVS[1]:LVS[lv]-LVS[lv-1];
             const reached=s.lv>=lv;const current=s.lv===lv;
@@ -2114,7 +2353,7 @@ function renderSV(){
               <td style="padding:5px 8px;font-family:'Cinzel',serif;font-weight:${current?'700':'400'};color:${reached?'var(--M)':'var(--INK3)'};">Lv ${lv}</td>
               <td style="padding:5px 8px;"><span style="background:${rk.bg};color:${rk.color};padding:1px 7px;border-radius:20px;font-size:10px;">${rk.icon} ${rk.name}</span></td>
               <td style="padding:5px 8px;color:${reached?'var(--INK)':'var(--INK3)'};">${needed.toLocaleString()} XP</td>
-              <td style="padding:5px 8px;font-size:12px;">${lv>=20?'🏆 Max':reached?'✓ Reached':current?'← You are here':''}</td>
+              <td style="padding:5px 8px;font-size:12px;">${lv>=getMaxLevel()?'🏆 Max':reached?'✓ Reached':current?'← You are here':''}</td>
             </tr>`;
           }).join('')}</tbody>
         </table>
@@ -2177,16 +2416,19 @@ function selectIcon(ic){
   if(el){el.style.borderColor='var(--M)';el.style.background='var(--MP)';}
 }
 // Profanity filter — basic word list, extensible
-const BAD_WORDS=['fuck','shit','ass','bitch','cunt','dick','pussy','bastard','damn','hell','crap','piss','cock','whore','slut','nigger','faggot','retard','gay','penis','vagina','fag','horny','boobs','sex','rape','anal'];
+const BAD_WORDS=['fuck','shit','ass','bitch','cunt','dick','pussy','bastard','damn','hell','crap','piss','cock','whore','slut','nigger','faggot','retard','gay','penis','vagina','fag','horny','boobs','sex','rape','anal','tits','tit','dildo','blowjob','handjob','orgasm','erect','nude','nudes','porno','porn','fuk','fck','sht','btch','dck','pnis','vag','azz','phuck','phuk','fux','fuq','suck','suq','cum','kum'];
 function moderateMotto(text){
   if(!text)return{ok:true,clean:''};
   const clean=text.trim();
-  // Strip all non-letter characters to catch "s.h.i.t", "sh it", "s h i t" etc.
-  const stripped=clean.toLowerCase().replace(/[^a-z]/g,'');
+  // Normalize: strip non-letters, convert common leet-speak substitutions
+  let norm=clean.toLowerCase();
+  // Leet-speak map
+  const leet={'0':'o','1':'i','3':'e','4':'a','5':'s','7':'t','8':'b','@':'a','$':'s','!':'i','#':'h','(':'c'};
+  norm=norm.split('').map(c=>leet[c]||c).join('');
+  // Strip remaining non-letters
+  const stripped=norm.replace(/[^a-z]/g,'');
   for(const w of BAD_WORDS){
-    // Check both original (with spaces/punctuation removed) and original text
-    const wStripped=w.replace(/[^a-z]/g,'');
-    if(stripped.includes(wStripped)){return{ok:false,clean};}
+    if(stripped.includes(w)){return{ok:false,clean};}
   }
   return{ok:true,clean};
 }
@@ -2336,6 +2578,7 @@ function completeSignIn(){
     render();
     setTimeout(initAutoSync,1000);
     setTimeout(checkFirstRun,500);
+    setTimeout(checkBackupReminder,5000);
   } else {
     document.getElementById('TV').style.display='none';
     document.getElementById('SV').style.display='block';
