@@ -859,7 +859,13 @@ html,body{scroll-behavior:auto;}
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Firebase database prep</div>
             <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Firebase is now wired into this app, but local storage is still the source of truth until we migrate each data type.</div>
             <div id="firebase-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;margin-bottom:8px;">Firebase status: checking...</div>
-            <button class="btn bo bsm" onclick="refreshFirebaseStatus()">Check Firebase Status</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <button class="btn bo bsm" onclick="refreshFirebaseStatus()">Check Firebase Status</button>
+              <button class="btn bm bsm" onclick="firebaseTeacherSignIn()">Sign in with Firebase</button>
+              <button class="btn bg bsm" onclick="checkFirebaseTeacherAccess()">Check Teacher Access</button>
+              <button class="btn bo bsm" onclick="firebaseTeacherSignOut()">Firebase Sign Out</button>
+            </div>
+            <div id="firebase-teacher-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;">Teacher access: not checked yet.</div>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
@@ -1020,11 +1026,18 @@ html,body{scroll-behavior:auto;}
       auth,
       db,
       googleProvider,
+      currentUser: null,
       sdk: {
         GoogleAuthProvider, signInWithPopup, firebaseSignOut, onAuthStateChanged,
         collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy, limit
       }
     };
+
+    onAuthStateChanged(auth, (firebaseUser) => {
+      window.QT_FIREBASE.currentUser = firebaseUser || null;
+      window.dispatchEvent(new CustomEvent('qt-firebase-auth-changed', { detail: firebaseUser || null }));
+    });
+
     window.dispatchEvent(new CustomEvent('qt-firebase-ready', { detail: window.QT_FIREBASE }));
   } catch (error) {
     console.error('Quest Tracker Firebase initialization failed:', error);
@@ -1039,6 +1052,17 @@ const GCL_ID='249246305432-o4ukh4lim7k2lfq6hlr3rked9ma5vhe2.apps.googleuserconte
 const TEACHER_DOMAINS=['deruytercentral.org'];
 const STUDENT_DOMAINS=['deruyterrockets.org'];
 
+function getFirebaseObjects(){
+  const fb=window.QT_FIREBASE;
+  if(!fb||!fb.ready)throw new Error('Firebase is not ready yet. Refresh the page or check that the page is served over HTTPS.');
+  return fb;
+}
+
+function setFirebaseTeacherStatus(msg,color){
+  const el=document.getElementById('firebase-teacher-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+}
+
 function refreshFirebaseStatus(silent){
   const el=document.getElementById('firebase-status');
   const fb=window.QT_FIREBASE;
@@ -1046,7 +1070,8 @@ function refreshFirebaseStatus(silent){
   let color='var(--INK3)';
 
   if(fb&&fb.ready){
-    msg='Firebase status: connected to project "'+(fb.config?.projectId||'unknown')+'". Auth and Firestore SDKs are loaded. Local storage is still active until the database migration is turned on.';
+    const authText=fb.currentUser?(' Firebase signed in as '+(fb.currentUser.email||fb.currentUser.displayName||'unknown user')+'.'):' Firebase is not signed in yet.';
+    msg='Firebase status: connected to project "'+(fb.config?.projectId||'unknown')+'". Auth and Firestore SDKs are loaded.'+authText+' Local storage is still active until the database migration is turned on.';
     color='#1A6B2A';
   }else if(fb&&fb.error){
     msg='Firebase status: initialization error — '+fb.error;
@@ -1060,8 +1085,69 @@ function refreshFirebaseStatus(silent){
   if(!silent&&typeof showEB==='function')showEB(msg);
 }
 
+async function firebaseTeacherSignIn(){
+  try{
+    const fb=getFirebaseObjects();
+    setFirebaseTeacherStatus('Teacher access: opening Firebase Google sign-in...','#7A5500');
+    const result=await fb.sdk.signInWithPopup(fb.auth,fb.googleProvider);
+    fb.currentUser=result.user;
+    refreshFirebaseStatus(true);
+    await checkFirebaseTeacherAccess();
+  }catch(e){
+    const msg='Firebase sign-in failed: '+(e?.message||e);
+    setFirebaseTeacherStatus(msg,'#8B1A1A');
+    showEB(msg);
+  }
+}
+
+async function firebaseTeacherSignOut(){
+  try{
+    const fb=getFirebaseObjects();
+    await fb.sdk.firebaseSignOut(fb.auth);
+    fb.currentUser=null;
+    refreshFirebaseStatus(true);
+    setFirebaseTeacherStatus('Teacher access: signed out of Firebase. Local Quest Tracker sign-in is unchanged.','#7A5500');
+  }catch(e){
+    const msg='Firebase sign-out failed: '+(e?.message||e);
+    setFirebaseTeacherStatus(msg,'#8B1A1A');
+    showEB(msg);
+  }
+}
+
+async function checkFirebaseTeacherAccess(){
+  try{
+    const fb=getFirebaseObjects();
+    if(!fb.currentUser){
+      setFirebaseTeacherStatus('Teacher access: not signed into Firebase yet. Click “Sign in with Firebase” first.','#7A5500');
+      return false;
+    }
+    const email=(fb.currentUser.email||'').toLowerCase();
+    setFirebaseTeacherStatus('Teacher access: checking Firestore rules for '+email+'...','#7A5500');
+    const ref=fb.sdk.doc(fb.db,'appConfig','teachers');
+    const snap=await fb.sdk.getDoc(ref);
+    if(!snap.exists()){
+      setFirebaseTeacherStatus('Teacher access: appConfig/teachers was not found. Check the Firestore document path.','#8B1A1A');
+      return false;
+    }
+    const allowed=(snap.data().allowedEmails||[]).map(x=>String(x).toLowerCase());
+    if(allowed.includes(email)){
+      setFirebaseTeacherStatus('Teacher access: approved. '+email+' is listed in appConfig/teachers. Database migration checks are ready.','#1A6B2A');
+      return true;
+    }
+    setFirebaseTeacherStatus('Teacher access: Firestore document loaded, but '+email+' is not in allowedEmails. Add this exact email if it should be approved.','#8B1A1A');
+    return false;
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']'):'';
+    const msg='Teacher access check failed'+code+': '+(e?.message||e)+'. If this says permission-denied, your signed-in Firebase email probably does not match appConfig/teachers or the rules were not published correctly.';
+    setFirebaseTeacherStatus(msg,'#8B1A1A');
+    showEB(msg);
+    return false;
+  }
+}
+
 window.addEventListener('qt-firebase-ready',()=>setTimeout(()=>refreshFirebaseStatus(true),100));
 window.addEventListener('qt-firebase-error',()=>setTimeout(()=>refreshFirebaseStatus(true),100));
+window.addEventListener('qt-firebase-auth-changed',()=>setTimeout(()=>refreshFirebaseStatus(true),100));
 
 
 function getTeacherEmails(){return[];}// No longer used for access control
