@@ -911,6 +911,16 @@ html,body{scroll-behavior:auto;}
               </div>
               <div id="firebase-assignments-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Assignment sync migration: not tested yet.</div>
             </div>
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--BDG);">
+              <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Step 14: quest board migration</div>
+              <div style="font-size:12px;color:var(--INK3);margin-bottom:8px;">This uploads Quest Board items only: title, description, icon, XP value, deadline, active/expired status, and teacher email. No student roster, XP history, attendance, or assignment grades are uploaded in this step.</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <button class="btn bo bsm" onclick="previewQuestMigration()">Preview Quest Board</button>
+                <button class="btn bm bsm" onclick="uploadQuestsToFirestore()">Upload Quest Board to Firestore</button>
+                <button class="btn bg bsm" onclick="compareLocalVsFirestoreQuests()">Compare Local vs Firestore Quests</button>
+              </div>
+              <div id="firebase-quests-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Quest board migration: not tested yet.</div>
+            </div>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
@@ -2022,6 +2032,163 @@ async function compareLocalVsFirestoreAssignmentAwards(){
     const code=e?.code?(' ['+e.code+']') : '';
     setFirebaseAssignmentsStatus('Assignment sync comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
     showEB('Assignment sync comparison failed'+code+'. Check the assignment migration box.');
+  }
+}
+
+
+function setFirebaseQuestsStatus(msg,color){
+  const el=document.getElementById('firebase-quests-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+}
+
+function normalizeQuestForFirestore(q,index){
+  const id=String(q?.id||('quest_'+simpleHash32((q?.title||'Untitled Quest')+'|'+(q?.deadline||'')+'|'+index)));
+  const deadline=q?.deadline?String(q.deadline):null;
+  let expired=false;
+  if(deadline){
+    const d=new Date(deadline);
+    expired=!Number.isNaN(d.getTime())&&d<new Date();
+  }
+  return {
+    schemaVersion:1,
+    id,
+    title:String(q?.title||'Untitled Quest'),
+    description:String(q?.desc||q?.description||''),
+    icon:String(q?.icon||'📜'),
+    xp:Number(q?.xp||0),
+    deadline,
+    active:!expired,
+    expired,
+    sortOrder:Number(index||0),
+    teacherEmail:getCurrentFirebaseEmail()||null,
+    updatedAtClient:new Date().toISOString(),
+    sourceSystem:'Quest Tracker quests/{questId} Step 14 quest board migration',
+    containsStudentData:false,
+    containsGrades:false
+  };
+}
+
+function getLocalQuestsForFirestore(){
+  const list=Array.isArray(quests)?quests:[];
+  const normalized=list.map((q,i)=>normalizeQuestForFirestore(q,i));
+  const unique=new Map();
+  normalized.forEach(q=>unique.set(q.id,q));
+  return [...unique.values()].sort((a,b)=>(a.sortOrder-b.sortOrder)||a.title.localeCompare(b.title));
+}
+
+function comparableQuest(q){
+  return {
+    schemaVersion:q?.schemaVersion||1,
+    id:String(q?.id||''),
+    title:String(q?.title||'Untitled Quest'),
+    description:String(q?.description||''),
+    icon:String(q?.icon||'📜'),
+    xp:Number(q?.xp||0),
+    deadline:q?.deadline?String(q.deadline):null,
+    active:q?.active===true,
+    expired:q?.expired===true,
+    sortOrder:Number(q?.sortOrder||0),
+    containsStudentData:q?.containsStudentData===true,
+    containsGrades:q?.containsGrades===true
+  };
+}
+
+function previewQuestMigration(){
+  try{
+    const localQuests=getLocalQuestsForFirestore();
+    const activeCount=localQuests.filter(q=>q.active).length;
+    const expiredCount=localQuests.filter(q=>q.expired).length;
+    const sample=localQuests.slice(0,5).map(q=>'• '+q.icon+' '+q.title+' — +'+q.xp+' XP'+(q.deadline?' — deadline '+q.deadline:'')).join('\n');
+    setFirebaseQuestsStatus([
+      'Quest board migration preview:',
+      'Local quests ready: '+localQuests.length,
+      'Will upload to: quests/{questId}',
+      'Active quests: '+activeCount,
+      'Expired quests: '+expiredCount,
+      'This step does not upload student data, XP logs, attendance, assignment records, or grades.',
+      sample?'Sample:\n'+sample:'No Quest Board items found.'
+    ].join('\n'),'#7A5500');
+  }catch(e){
+    setFirebaseQuestsStatus('Quest board preview FAILED. '+(e?.message||e),'#8B1A1A');
+  }
+}
+
+async function uploadQuestsToFirestore(){
+  try{
+    setFirebaseQuestsStatus('Quest board migration: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    const localQuests=getLocalQuestsForFirestore();
+    if(!localQuests.length)throw new Error('No local Quest Board items found to upload. Add a quest first, or skip this step for now.');
+    const msg='Upload '+localQuests.length+' Quest Board item'+(localQuests.length!==1?'s':'')+' to Firestore?\n\nThis will upload quest titles, descriptions, icons, XP values, deadlines, and active/expired status.\n\nThis will NOT upload student roster, XP logs, attendance, assignment records, or grades.';
+    if(!confirm(msg))return;
+    const fb=getFirebaseObjects();
+    setFirebaseQuestsStatus('Quest board migration: uploading '+localQuests.length+' quests to quests/{questId}...','#7A5500');
+    const batch=fb.sdk.writeBatch(fb.db);
+    localQuests.forEach(q=>{
+      const payload={...q,updatedAt:fb.sdk.serverTimestamp()};
+      const ref=fb.sdk.doc(fb.db,'quests',q.id);
+      batch.set(ref,payload,{merge:true});
+    });
+    await batch.commit();
+    setFirebaseQuestsStatus([
+      'Quest board migration: SUCCESS.',
+      'Uploaded quests: '+localQuests.length,
+      'Firestore path: quests/{questId}',
+      'No student data, XP logs, attendance, assignment records, or grades were uploaded.',
+      'Next recommended check: Compare Local vs Firestore Quests.'
+    ].join('\n'),'#1A6B2A');
+    showEB('Quest Board uploaded to Firestore. No student records were uploaded in this step.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseQuestsStatus('Quest board upload FAILED'+code+'. '+(e?.message||e)+'\n\nIf this says permission-denied, publish the Step 14 rules that allow approved teachers to read/write quests/{questId}.','#8B1A1A');
+    showEB('Quest board upload failed'+code+'. Check the quest migration box.');
+  }
+}
+
+async function compareLocalVsFirestoreQuests(){
+  try{
+    setFirebaseQuestsStatus('Quest board comparison: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    const fb=getFirebaseObjects();
+    const localQuests=getLocalQuestsForFirestore();
+    if(!localQuests.length)throw new Error('No local Quest Board items found to compare.');
+    setFirebaseQuestsStatus('Quest board comparison: reading Firestore quests collection...','#7A5500');
+    const snap=await fb.sdk.getDocs(fb.sdk.collection(fb.db,'quests'));
+    const remoteMap=new Map();
+    snap.forEach(d=>remoteMap.set(d.id,d.data()));
+    const missing=[];
+    const different=[];
+    localQuests.forEach(local=>{
+      const remote=remoteMap.get(local.id);
+      if(!remote){missing.push(local.title);return;}
+      const a=stableStringify(comparableQuest(local));
+      const b=stableStringify(comparableQuest(remote));
+      if(a!==b)different.push(local.title);
+    });
+    const extra=[];
+    remoteMap.forEach((remote,id)=>{
+      if(!localQuests.some(local=>local.id===id))extra.push(remote?.title||id);
+    });
+    const match=missing.length===0&&different.length===0&&extra.length===0;
+    const lines=[
+      match?'Quest board comparison: MATCH.':'Quest board comparison: DIFFERENCES FOUND.',
+      'Firestore path: quests/{questId}',
+      'Local quests: '+localQuests.length,
+      'Firestore quests: '+remoteMap.size,
+      'Missing in Firestore: '+missing.length,
+      'Different quests: '+different.length,
+      'Extra Firestore quests: '+extra.length,
+      'Compared Quest Board items only. No student data, XP logs, attendance, assignment records, or grades were compared.'
+    ];
+    if(missing.length)lines.push('Missing sample: '+missing.slice(0,5).join('; '));
+    if(different.length)lines.push('Different sample: '+different.slice(0,5).join('; '));
+    if(extra.length)lines.push('Extra sample: '+extra.slice(0,5).join('; '));
+    setFirebaseQuestsStatus(lines.join('\n'),match?'#1A6B2A':'#7A5500');
+    showEB(match?'Local Quest Board matches Firestore.':'Quest board comparison found differences.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseQuestsStatus('Quest board comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+    showEB('Quest board comparison failed'+code+'. Check the quest migration box.');
   }
 }
 
