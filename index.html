@@ -850,7 +850,7 @@ html,body{scroll-behavior:auto;}
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Backup &amp; Restore</div>
           <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Export all data as a JSON file. Import to restore on any device or after clearing browser storage.</div>
           <div style="display:flex;gap:8px;margin-bottom:12px;">
-            <button class="btn bm bsm" onclick="exportBackup()">⬇️ Export Backup</button>
+            <button class="btn bm bsm" onclick="exportBackup()">⬇️ Export Encrypted Backup</button>
             <button class="btn bo bsm" onclick="importBackup()">⬆️ Import Backup</button>
           </div>
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
@@ -1233,6 +1233,7 @@ function load(){
     const aw=localStorage.getItem('dq_awarded');if(aw)awardedSubmissions=JSON.parse(aw);
     const aal=localStorage.getItem('dq_aal');if(aal)autoAwardLog=JSON.parse(aal);
     const sr=localStorage.getItem('dq_sr');if(sr)seasonRewards=JSON.parse(sr);
+    if(sanitizeStoredGradeDetails())save();
     // Migrate legacy hardcoded rank badge IDs to dynamic rank_X format
     migrateBadgeIds();
   }catch(e){}
@@ -1819,46 +1820,174 @@ function fullSessionReset(){
   setTimeout(()=>location.reload(),1000);
 }
 
-function exportBackup(){
-  const backup={
+const QT_BACKUP_FORMAT='DQTB1';
+const QT_BACKUP_ITERATIONS=250000;
+
+function scoreBandFromPct(pct){
+  if(pct===null||pct===undefined||isNaN(pct))return'SUBMITTED_ONLY';
+  if(Number(pct)===100)return'PERFECT';
+  if(Number(pct)>=85)return'EIGHTY_FIVE_PLUS';
+  return'BELOW_85';
+}
+function scoreBandLabel(band){
+  if(band==='PERFECT')return'perfect score';
+  if(band==='EIGHTY_FIVE_PLUS')return'85%+';
+  if(band==='BELOW_85')return'below 85%';
+  if(band==='SUBMITTED_ONLY')return'submitted';
+  return'';
+}
+function scoreBandFromLegacyScore(score){
+  if(score===null||score===undefined||score==='')return'SUBMITTED_ONLY';
+  const n=Number(score);
+  if(isNaN(n))return'SUBMITTED_ONLY';
+  return scoreBandFromPct(n);
+}
+function sanitizeGradeText(text){
+  if(typeof text!=='string')return text;
+  return text
+    .replace(/\s*·\s*\d+(?:\.\d+)?%/g,'')
+    .replace(/\bScore:\s*\d+(?:\.\d+)?%?/gi,'Score band recorded')
+    .replace(/\bgrade\s*[:=]\s*\d+(?:\.\d+)?%?/gi,'grade band recorded');
+}
+function sanitizeStoredGradeDetails(){
+  let changed=false;
+  if(Array.isArray(log)){
+    log.forEach(item=>{if(item&&item.msg){const clean=sanitizeGradeText(item.msg);if(clean!==item.msg){item.msg=clean;changed=true;}}});
+  }
+  if(Array.isArray(autoAwardLog)){
+    autoAwardLog.forEach(item=>{
+      if(!item)return;
+      if(item.scoreBand===undefined)item.scoreBand=scoreBandFromLegacyScore(item.score);
+      if(item.score!==undefined){delete item.score;changed=true;}
+      ['assignment','category','reasons','date','student'].forEach(k=>{if(item[k]){const clean=sanitizeGradeText(item[k]);if(clean!==item[k]){item[k]=clean;changed=true;}}});
+    });
+  }
+  if(Array.isArray(students)){
+    students.forEach(s=>{
+      if(Array.isArray(s.hist))s.hist.forEach(h=>{if(h&&h.reason){const clean=sanitizeGradeText(h.reason);if(clean!==h.reason){h.reason=clean;changed=true;}}});
+    });
+  }
+  return changed;
+}
+function makeBackupObject(){
+  sanitizeStoredGradeDetails();
+  return {
     version:DATA_VERSION,
     timestamp:new Date().toISOString(),
+    privacy:'grade_details_minimized_v1',
     students:students,log:log,privs:privs,acts:acts,quests:quests,
     customBadges:customBadges,xpCategories:xpCategories,
     awardedSubmissions:awardedSubmissions,autoAwardLog:autoAwardLog,
     seasonRewards:seasonRewards,savedPeriods:savedPeriods,
     RANKS:RANKS,LVS:LVS
   };
-  const json=JSON.stringify(backup,null,2);
-  const blob=new Blob([json],{type:'application/json'});
+}
+function abToB64(buf){
+  const bytes=new Uint8Array(buf);let bin='';
+  bytes.forEach(b=>bin+=String.fromCharCode(b));
+  return btoa(bin);
+}
+function b64ToAb(b64){
+  const bin=atob(b64);const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  return bytes.buffer;
+}
+async function deriveBackupKey(pass,salt,iterations){
+  const enc=new TextEncoder();
+  const material=await crypto.subtle.importKey('raw',enc.encode(pass),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {name:'PBKDF2',salt,iterations,hash:'SHA-256'},
+    material,
+    {name:'AES-GCM',length:256},
+    false,
+    ['encrypt','decrypt']
+  );
+}
+async function encryptBackupObject(obj,pass){
+  const enc=new TextEncoder();
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const key=await deriveBackupKey(pass,salt,QT_BACKUP_ITERATIONS);
+  const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,enc.encode(JSON.stringify(obj)));
+  return {
+    format:QT_BACKUP_FORMAT,
+    version:3,
+    timestamp:obj.timestamp,
+    encrypted:true,
+    algorithm:'AES-GCM-256',
+    kdf:'PBKDF2-SHA256',
+    iterations:QT_BACKUP_ITERATIONS,
+    salt:abToB64(salt),
+    iv:abToB64(iv),
+    data:abToB64(cipher)
+  };
+}
+async function decryptBackupObject(wrapper,pass){
+  if(!wrapper||wrapper.format!==QT_BACKUP_FORMAT||!wrapper.encrypted)throw new Error('Not an encrypted Quest Tracker backup.');
+  const salt=new Uint8Array(b64ToAb(wrapper.salt));
+  const iv=new Uint8Array(b64ToAb(wrapper.iv));
+  const key=await deriveBackupKey(pass,salt,wrapper.iterations||QT_BACKUP_ITERATIONS);
+  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,b64ToAb(wrapper.data));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+function downloadTextFile(filename,text,mime){
+  const blob=new Blob([text],{type:mime});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url;a.download='QuestTracker-Backup-'+new Date().toISOString().slice(0,10)+'.json';
+  a.href=url;a.download=filename;
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),2000);
-  localStorage.setItem('dq_lastbackup',Date.now().toString());
-  showEB('Backup exported successfully.');
+}
+function restoreBackupData(data){
+  if(!data.students||!Array.isArray(data.students)){showEB('Invalid backup file.');return false;}
+  if(!confirm(`Import backup from ${data.timestamp||'unknown date'}? This has ${data.students.length} students. Current data will be overwritten.`))return false;
+  students=data.students||[];log=data.log||[];privs=data.privs||[];
+  acts=data.acts||[];quests=data.quests||[];customBadges=data.customBadges||[];
+  xpCategories=data.xpCategories||[];awardedSubmissions=data.awardedSubmissions||{};
+  autoAwardLog=data.autoAwardLog||[];seasonRewards=data.seasonRewards||{};
+  savedPeriods=data.savedPeriods||[];
+  if(data.RANKS&&data.RANKS.length)RANKS=data.RANKS;
+  if(data.LVS&&data.LVS.length){LVS=data.LVS;saveCustomXP(LVS);}
+  sanitizeStoredGradeDetails();
+  saveRanks();save();savePeriods();render();
+  showEB(`Backup restored: ${students.length} students imported.`);
+  return true;
+}
+
+async function exportBackup(){
+  try{
+    if(!crypto.subtle){showEB('Encrypted backup requires HTTPS or a secure browser context. Use the GitHub Pages version, not a local file.');return;}
+    const pass=prompt('Create a backup password. You will need this password to import this backup later.');
+    if(!pass)return;
+    if(pass.length<8){showEB('Backup password must be at least 8 characters.');return;}
+    const pass2=prompt('Re-enter the backup password to confirm.');
+    if(pass!==pass2){showEB('Backup passwords did not match. Backup canceled.');return;}
+    const backup=makeBackupObject();
+    const encrypted=await encryptBackupObject(backup,pass);
+    downloadTextFile('QuestTracker-Backup-'+new Date().toISOString().slice(0,10)+'.qtbackup',JSON.stringify(encrypted,null,2),'application/octet-stream');
+    save();
+    localStorage.setItem('dq_lastbackup',Date.now().toString());
+    showEB('Encrypted backup exported successfully. Keep the password safe — it cannot be recovered.');
+  }catch(err){showEB('Error creating encrypted backup: '+err.message);}
 }
 
 function importBackup(){
-  const input=document.createElement('input');input.type='file';input.accept='.json';
+  const input=document.createElement('input');input.type='file';input.accept='.qtbackup,.json';
   input.onchange=e=>{
     const file=e.target.files[0];if(!file)return;
     const reader=new FileReader();
-    reader.onload=ev=>{
+    reader.onload=async ev=>{
       try{
-        const data=JSON.parse(ev.target.result);
-        if(!data.students||!Array.isArray(data.students)){showEB('Invalid backup file.');return;}
-        if(!confirm(`Import backup from ${data.timestamp||'unknown date'}? This has ${data.students.length} students. Current data will be overwritten.`))return;
-        students=data.students||[];log=data.log||[];privs=data.privs||[];
-        acts=data.acts||[];quests=data.quests||[];customBadges=data.customBadges||[];
-        xpCategories=data.xpCategories||[];awardedSubmissions=data.awardedSubmissions||{};
-        autoAwardLog=data.autoAwardLog||[];seasonRewards=data.seasonRewards||{};
-        savedPeriods=data.savedPeriods||[];
-        if(data.RANKS&&data.RANKS.length)RANKS=data.RANKS;
-        if(data.LVS&&data.LVS.length){LVS=data.LVS;saveCustomXP(LVS);}
-        saveRanks();save();savePeriods();render();
-        showEB(`Backup restored: ${students.length} students imported.`);
+        let data=JSON.parse(ev.target.result);
+        if(data&&data.format===QT_BACKUP_FORMAT&&data.encrypted){
+          if(!crypto.subtle){showEB('Encrypted import requires HTTPS or a secure browser context. Use the GitHub Pages version, not a local file.');return;}
+          const pass=prompt('Enter the backup password.');
+          if(!pass)return;
+          data=await decryptBackupObject(data,pass);
+        }else if(!confirm('This appears to be an older unencrypted JSON backup. Import it anyway?')){
+          return;
+        }
+        restoreBackupData(data);
       }catch(err){showEB('Error reading backup file: '+err.message);}
     };
     reader.readAsText(file);
@@ -1875,7 +2004,7 @@ function checkBackupReminder(){
   }
 }
 function randomStudentPicker(){
-  const cls=acls;
+  const cls=pcState.cls||acls;
   let pool=filt(cls);
   // Optionally filter out absent students (from current attendance state)
   const attState=attStates[cls];
@@ -1917,7 +2046,7 @@ function randomStudentPicker(){
 function openTeamGenerator(){
   let mo=document.getElementById('TEAM-MO');
   if(!mo){mo=document.createElement('div');mo.id='TEAM-MO';mo.className='mo';mo.style.zIndex='600';mo.onclick=e=>{if(e.target===mo)mo.style.display='none';};document.body.appendChild(mo);}
-  const cls=acls;
+  const cls=pcState.cls||acls;
   const pool=filt(cls);
   if(!pool.length){showEB('No students in the selected class.');return;}
   mo.innerHTML=`<div class="md" style="max-width:520px;">
@@ -1945,7 +2074,7 @@ function openTeamGenerator(){
 }
 
 function generateTeams(){
-  const cls=acls;
+  const cls=pcState.cls||acls;
   let pool=[...filt(cls)];
   const numTeams=parseInt(document.getElementById('team-count').value)||2;
   const method=document.getElementById('team-method').value;
@@ -4065,7 +4194,7 @@ function renderAutoAwardLog(){
   if(!autoAwardLog.length){el.innerHTML='<div style="font-size:13px;color:var(--INK3);">No auto-awards yet. Press Sync Assignments.</div>';return;}
   el.innerHTML=autoAwardLog.slice(0,100).map(a=>
     `<div class="auto-award-item">
-      <span><strong>${a.student}</strong> — ${a.assignment} <span style="font-size:11px;color:var(--INK3);">[${a.category}${a.score!==null?' · Score: '+a.score:''}]</span> <span style="font-size:11px;color:var(--INK3);">${a.date}</span></span>
+      <span><strong>${a.student}</strong> — ${a.assignment} <span style="font-size:11px;color:var(--INK3);">[${a.category}${a.scoreBand!==undefined?' · '+scoreBandLabel(a.scoreBand):''}]</span> <span style="font-size:11px;color:var(--INK3);">${a.date}</span></span>
       <span class="auto-award-xp">+${a.xp} XP</span>
     </div>`
   ).join('');
@@ -4829,11 +4958,12 @@ function runSync(){
         const grade=hasGrade?parseFloat(rawGrade):null;
         const maxPoints=parseFloat(cw.maxPoints)||100;
         const pctScore=(grade!==null&&!isNaN(grade))?Math.round((grade/maxPoints)*100):null;
+        const scoreBand=scoreBandFromPct(pctScore);
 
         // Flag: no matching student
         if(!s){
           if(prevStatus!=='flagged'){
-            flagged.push({reason:'Student not in roster',assignment:cw.title,course:course.name,userId:sub.userId,score:pctScore});
+            flagged.push({reason:'Student not in roster',assignment:cw.title,course:course.name,userId:sub.userId,scoreBand:scoreBand});
             awardedSubmissions[submissionKey]='flagged';
           }
           return;
@@ -4842,7 +4972,7 @@ function runSync(){
         // Flag: no matching category
         if(!cat){
           if(prevStatus!=='flagged'){
-            flagged.push({reason:`Category "${catName||'(none)'}" not configured`,assignment:cw.title,course:course.name,student:s.name,score:pctScore});
+            flagged.push({reason:`Category "${catName||'(none)'}" not configured`,assignment:cw.title,course:course.name,student:s.name,scoreBand:scoreBand});
             awardedSubmissions[submissionKey]='flagged';
           }
           return;
@@ -4852,7 +4982,7 @@ function runSync(){
         if(hasGrade&&(grade===0||isNaN(grade))){
           // Only add to flagged list if not already flagged as zero
           if(prevStatus!=='zero'){
-            flagged.push({reason:'Grade is 0 — no XP awarded',assignment:cw.title,course:course.name,student:s.name,score:0});
+            flagged.push({reason:'Grade is 0 — no XP awarded',assignment:cw.title,course:course.name,student:s.name,scoreBand:'BELOW_85'});
             awardedSubmissions[submissionKey]='zero';
           }
           return;
@@ -4893,9 +5023,10 @@ function runSync(){
         awardedSubmissions[submissionKey]=true;
         awardedSubmissions[submissionKey+'_xp']=xpToAward;
 
-        const logMsg=`${s.name} +${delta} XP — "${cw.title}" [${catName}]${pctScore!==null?' · '+pctScore+'%':''}${isTopUp?' (grade top-up)':''} (${reasons.join(', ')})`;
+        const bandText=scoreBandLabel(scoreBand);
+        const logMsg=`${s.name} +${delta} XP — "${cw.title}" [${catName}]${bandText?' · '+bandText:''}${isTopUp?' (grade top-up)':''} (${reasons.join(', ')})`;
         addLog(logMsg,'xp');
-        autoAwardLog.unshift({student:s.name,assignment:cw.title,category:catName,score:pctScore,xp:delta,date:dateStr+' '+timeStr,reasons:reasons.join(', ')+(isTopUp?' [top-up]':'')});
+        autoAwardLog.unshift({student:s.name,assignment:cw.title,category:catName,scoreBand:scoreBand,xp:delta,date:dateStr+' '+timeStr,reasons:reasons.join(', ')+(isTopUp?' [top-up]':'')});
         if(autoAwardLog.length>500)autoAwardLog.pop();
         if(s.lv>prevLv){addLog(`${s.name} → Level ${s.lv} — ${getRank(s.lv).name}! ${getRank(s.lv).icon}`,'level');luQueue.push(s);}
 
@@ -4909,7 +5040,7 @@ function runSync(){
       document.getElementById('flagged-list').innerHTML=flagged.map(f=>
         `<div class="flagged-item">
           <strong>${f.assignment}</strong> — ${f.course||''} ${f.student?'· '+f.student:''}<br/>
-          <span style="color:var(--INK3);">Reason: ${f.reason}${f.score!==null&&f.score!==undefined?' · Score: '+f.score+'%':''}</span>
+          <span style="color:var(--INK3);">Reason: ${f.reason}${f.scoreBand!==undefined?' · '+scoreBandLabel(f.scoreBand):''}</span>
         </div>`
       ).join('');
       addAssignLog(`⚠️ ${flagged.length} submission${flagged.length!==1?'s':''} flagged for manual review.`,'error');
