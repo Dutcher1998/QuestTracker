@@ -901,6 +901,16 @@ html,body{scroll-behavior:auto;}
               </div>
               <div id="firebase-xplogs-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">XP log migration: not tested yet.</div>
             </div>
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--BDG);">
+              <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Step 13: assignment sync record migration</div>
+              <div style="font-size:12px;color:var(--INK3);margin-bottom:8px;">This uploads Google Classroom sync records that prevent assignments from being double-awarded. It stores submission keys, statuses, student links, Google Classroom IDs, and total XP awarded where available. Exact grade percentages are not stored.</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <button class="btn bo bsm" onclick="previewAssignmentAwardMigration()">Preview Assignment Sync Records</button>
+                <button class="btn bm bsm" onclick="uploadAssignmentAwardsToFirestore()">Upload Assignment Sync Records to Firestore</button>
+                <button class="btn bg bsm" onclick="compareLocalVsFirestoreAssignmentAwards()">Compare Local vs Firestore Assignment Records</button>
+              </div>
+              <div id="firebase-assignments-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Assignment sync migration: not tested yet.</div>
+            </div>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
@@ -1811,6 +1821,207 @@ async function compareLocalVsFirestoreXpLogs(){
     const code=e?.code?(' ['+e.code+']') : '';
     setFirebaseXpLogsStatus('XP log comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
     showEB('XP log comparison failed'+code+'. Check the XP log migration box.');
+  }
+}
+
+
+function setFirebaseAssignmentsStatus(msg,color){
+  const el=document.getElementById('firebase-assignments-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+}
+
+function parseAwardedSubmissionKey(key){
+  const parts=String(key||'').split(':');
+  if(parts.length<3)return null;
+  return {
+    googleCourseId:parts[0]||'',
+    googleAssignmentId:parts[1]||'',
+    googleUserId:parts.slice(2).join(':')||''
+  };
+}
+
+function normalizeAssignmentAwardStatus(value){
+  if(value===true)return 'awarded';
+  if(value==='zero')return 'zero_no_xp';
+  if(value==='flagged')return 'flagged_review';
+  return String(value||'unknown');
+}
+
+function makeAssignmentAwardId(submissionKey){
+  return 'aw_'+simpleHash32(String(submissionKey||''));
+}
+
+function getLocalAssignmentAwardsForFirestore(){
+  const awards=[];
+  const keys=Object.keys(awardedSubmissions||{}).filter(k=>!String(k).endsWith('_xp'));
+  keys.forEach(key=>{
+    const parsed=parseAwardedSubmissionKey(key);
+    if(!parsed)return;
+    const student=students.find(s=>String(s.gid||'')===String(parsed.googleUserId));
+    const rawStatus=awardedSubmissions[key];
+    const status=normalizeAssignmentAwardStatus(rawStatus);
+    const xpAwarded=Number(awardedSubmissions[key+'_xp']||0);
+    awards.push({
+      schemaVersion:1,
+      id:makeAssignmentAwardId(key),
+      submissionKey:String(key),
+      googleCourseId:String(parsed.googleCourseId||''),
+      googleAssignmentId:String(parsed.googleAssignmentId||''),
+      googleUserId:String(parsed.googleUserId||''),
+      studentId:student?.id?String(student.id):null,
+      studentName:student?.name?String(student.name):null,
+      className:student?.cls?String(student.cls):null,
+      classId:safeFirestoreId(student?.cls||'unassigned'),
+      status,
+      submitted:status==='awarded',
+      needsReview:status==='flagged_review',
+      shouldRecheck:status==='zero_no_xp'||status==='flagged_review',
+      xpAwardedTotal:xpAwarded,
+      scoreBand:null,
+      assignmentTitle:null,
+      category:null,
+      teacherEmail:getCurrentFirebaseEmail()||null,
+      updatedAtClient:new Date().toISOString(),
+      sourceSystem:'Quest Tracker assignments/{assignmentAwardId} Step 13 assignment sync migration',
+      preventsDoubleAwarding:true,
+      containsStudentProfileData:!!student,
+      containsExactGradePercentage:false
+    });
+  });
+  const unique=new Map();
+  awards.forEach(a=>unique.set(a.id,a));
+  return [...unique.values()].sort((a,b)=>a.id.localeCompare(b.id));
+}
+
+function comparableAssignmentAward(a){
+  return {
+    schemaVersion:a?.schemaVersion||1,
+    id:String(a?.id||''),
+    submissionKey:String(a?.submissionKey||''),
+    googleCourseId:String(a?.googleCourseId||''),
+    googleAssignmentId:String(a?.googleAssignmentId||''),
+    googleUserId:String(a?.googleUserId||''),
+    studentId:a?.studentId?String(a.studentId):null,
+    studentName:a?.studentName?String(a.studentName):null,
+    className:a?.className?String(a.className):null,
+    classId:String(a?.classId||safeFirestoreId(a?.className||'unassigned')),
+    status:String(a?.status||'unknown'),
+    submitted:a?.submitted===true,
+    needsReview:a?.needsReview===true,
+    shouldRecheck:a?.shouldRecheck===true,
+    xpAwardedTotal:Number(a?.xpAwardedTotal||0),
+    scoreBand:a?.scoreBand||null,
+    assignmentTitle:a?.assignmentTitle||null,
+    category:a?.category||null,
+    preventsDoubleAwarding:a?.preventsDoubleAwarding===true,
+    containsExactGradePercentage:a?.containsExactGradePercentage===true?true:false
+  };
+}
+
+function previewAssignmentAwardMigration(){
+  try{
+    sanitizeStoredGradeDetails();
+    const awards=getLocalAssignmentAwardsForFirestore();
+    const byStatus={};
+    awards.forEach(a=>{byStatus[a.status]=(byStatus[a.status]||0)+1;});
+    const sample=awards.slice(0,5).map(a=>'• '+(a.studentName||'Unknown student')+' — '+a.status+' — +'+a.xpAwardedTotal+' XP — course '+a.googleCourseId+' / assignment '+a.googleAssignmentId).join('\n');
+    setFirebaseAssignmentsStatus([
+      'Assignment sync migration preview:',
+      'Local assignment sync records ready: '+awards.length,
+      'Will upload to: assignments/{assignmentAwardId}',
+      'Statuses: '+(Object.keys(byStatus).length?Object.entries(byStatus).map(([k,v])=>k+'='+v).join(', '):'none'),
+      'These records prevent double-awarding when Google Classroom sync runs again.',
+      'Exact grade percentages are not stored.',
+      sample?'Sample:\n'+sample:'No assignment sync records found.'
+    ].join('\n'),'#7A5500');
+  }catch(e){
+    setFirebaseAssignmentsStatus('Assignment sync preview FAILED. '+(e?.message||e),'#8B1A1A');
+  }
+}
+
+async function uploadAssignmentAwardsToFirestore(){
+  try{
+    setFirebaseAssignmentsStatus('Assignment sync migration: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    sanitizeStoredGradeDetails();
+    const awards=getLocalAssignmentAwardsForFirestore();
+    if(!awards.length)throw new Error('No local assignment sync records found to upload. Sync Google Classroom first, or upload later after records exist.');
+    const msg='Upload '+awards.length+' assignment sync records to Firestore?\n\nThis WILL upload Google Classroom course IDs, assignment IDs, submission/user IDs, linked student names where available, status, and total XP awarded.\n\nThis will NOT upload exact grade percentages.';
+    if(!confirm(msg))return;
+    const fb=getFirebaseObjects();
+    setFirebaseAssignmentsStatus('Assignment sync migration: uploading '+awards.length+' records to assignments/{assignmentAwardId}...','#7A5500');
+    const chunks=[];
+    for(let i=0;i<awards.length;i+=400)chunks.push(awards.slice(i,i+400));
+    for(let c=0;c<chunks.length;c++){
+      const batch=fb.sdk.writeBatch(fb.db);
+      chunks[c].forEach(award=>{
+        const payload={...award,updatedAt:fb.sdk.serverTimestamp()};
+        const ref=fb.sdk.doc(fb.db,'assignments',award.id);
+        batch.set(ref,payload,{merge:true});
+      });
+      await batch.commit();
+      setFirebaseAssignmentsStatus('Assignment sync migration: uploaded batch '+(c+1)+' of '+chunks.length+'...','#7A5500');
+    }
+    setFirebaseAssignmentsStatus([
+      'Assignment sync migration: SUCCESS.',
+      'Uploaded assignment sync records: '+awards.length,
+      'Firestore path: assignments/{assignmentAwardId}',
+      'Exact grade percentages were NOT uploaded.',
+      'Next recommended check: Compare Local vs Firestore Assignment Records.'
+    ].join('\n'),'#1A6B2A');
+    showEB('Assignment sync records uploaded to Firestore. Exact grade percentages were not uploaded.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseAssignmentsStatus('Assignment sync upload FAILED'+code+'. '+(e?.message||e)+'\n\nIf this says permission-denied, publish the Step 13 rules that allow approved teachers to read/write assignments/{assignmentAwardId}.','#8B1A1A');
+    showEB('Assignment sync upload failed'+code+'. Check the assignment migration box.');
+  }
+}
+
+async function compareLocalVsFirestoreAssignmentAwards(){
+  try{
+    setFirebaseAssignmentsStatus('Assignment sync comparison: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    const fb=getFirebaseObjects();
+    sanitizeStoredGradeDetails();
+    const localAwards=getLocalAssignmentAwardsForFirestore();
+    if(!localAwards.length)throw new Error('No local assignment sync records found to compare.');
+    setFirebaseAssignmentsStatus('Assignment sync comparison: reading Firestore assignments collection...','#7A5500');
+    const snap=await fb.sdk.getDocs(fb.sdk.collection(fb.db,'assignments'));
+    const remoteMap=new Map();
+    snap.forEach(d=>remoteMap.set(d.id,d.data()));
+    const missing=[];
+    const different=[];
+    localAwards.forEach(local=>{
+      const remote=remoteMap.get(local.id);
+      if(!remote){missing.push((local.studentName||'Unknown')+' — '+local.submissionKey);return;}
+      const a=stableStringify(comparableAssignmentAward(local));
+      const b=stableStringify(comparableAssignmentAward(remote));
+      if(a!==b)different.push((local.studentName||'Unknown')+' — '+local.submissionKey);
+    });
+    const extra=[];
+    remoteMap.forEach((remote,id)=>{
+      if(!localAwards.some(local=>local.id===id))extra.push((remote?.studentName||'Unknown')+' — '+(remote?.submissionKey||id));
+    });
+    const match=missing.length===0&&different.length===0&&extra.length===0;
+    const lines=[
+      match?'Assignment sync comparison: MATCH.':'Assignment sync comparison: DIFFERENCES FOUND.',
+      'Firestore path: assignments/{assignmentAwardId}',
+      'Local assignment sync records: '+localAwards.length,
+      'Firestore assignment sync records: '+remoteMap.size,
+      'Missing in Firestore: '+missing.length,
+      'Different records: '+different.length,
+      'Extra Firestore records: '+extra.length,
+      'Compared assignment sync tracking records only. Exact grade percentages were not compared or stored.'
+    ];
+    if(missing.length)lines.push('Missing sample: '+missing.slice(0,5).join('; '));
+    if(different.length)lines.push('Different sample: '+different.slice(0,5).join('; '));
+    if(extra.length)lines.push('Extra sample: '+extra.slice(0,5).join('; '));
+    setFirebaseAssignmentsStatus(lines.join('\n'),match?'#1A6B2A':'#7A5500');
+    showEB(match?'Local assignment sync records match Firestore.':'Assignment sync comparison found differences.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseAssignmentsStatus('Assignment sync comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+    showEB('Assignment sync comparison failed'+code+'. Check the assignment migration box.');
   }
 }
 
