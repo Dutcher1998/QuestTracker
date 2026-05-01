@@ -1821,7 +1821,7 @@ function fullSessionReset(){
 }
 
 const QT_BACKUP_FORMAT='DQTB1';
-const QT_BACKUP_ITERATIONS=250000;
+const QT_BACKUP_ITERATIONS=120000;
 
 function scoreBandFromPct(pct){
   if(pct===null||pct===undefined||isNaN(pct))return'SUBMITTED_ONLY';
@@ -1930,13 +1930,38 @@ async function decryptBackupObject(wrapper,pass){
   const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,b64ToAb(wrapper.data));
   return JSON.parse(new TextDecoder().decode(plain));
 }
+function showDownloadFallback(filename,url){
+  let box=document.getElementById('download-fallback-box');
+  if(!box){
+    box=document.createElement('div');
+    box.id='download-fallback-box';
+    box.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;background:#3D0A14;color:#fff;padding:12px 16px;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);font-size:14px;display:flex;gap:10px;align-items:center;max-width:92vw;';
+    document.body.appendChild(box);
+  }
+  box.innerHTML=`<span>Backup ready.</span><a id="manual-download-link" href="${url}" download="${filename}" style="color:#E8C97A;text-decoration:underline;font-family:Cinzel,serif;white-space:nowrap;">Click to download</a><button onclick="document.getElementById('download-fallback-box')?.remove()" style="background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:3px 8px;cursor:pointer;">Close</button>`;
+}
+
 function downloadTextFile(filename,text,mime){
-  const blob=new Blob([text],{type:mime});
+  const blob=new Blob([text],{type:mime||'application/json;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url;a.download=filename;
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  a.href=url;
+  a.download=filename;
+  a.rel='noopener';
+  a.style.display='none';
+  document.body.appendChild(a);
+  try{
+    a.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));
+  }catch(e){
+    a.click();
+  }
+  setTimeout(()=>{try{document.body.removeChild(a);}catch(e){}},1000);
+  // Keep a manual link in case the browser blocks the automatic download after encryption.
+  showDownloadFallback(filename,url);
+  setTimeout(()=>{
+    if(!document.getElementById('download-fallback-box'))URL.revokeObjectURL(url);
+  },10*60*1000);
+  return url;
 }
 function restoreBackupData(data){
   if(!data.students||!Array.isArray(data.students)){showEB('Invalid backup file.');return false;}
@@ -1956,18 +1981,20 @@ function restoreBackupData(data){
 
 async function exportBackup(){
   try{
-    if(!crypto.subtle){showEB('Encrypted backup requires HTTPS or a secure browser context. Use the GitHub Pages version, not a local file.');return;}
+    if(!window.crypto||!crypto.subtle){showEB('Encrypted backup requires HTTPS or a secure browser context. Use the GitHub Pages version, not a local file.');return;}
     const pass=prompt('Create a backup password. You will need this password to import this backup later.');
     if(!pass)return;
     if(pass.length<8){showEB('Backup password must be at least 8 characters.');return;}
     const pass2=prompt('Re-enter the backup password to confirm.');
     if(pass!==pass2){showEB('Backup passwords did not match. Backup canceled.');return;}
+    showEB('Creating encrypted backup… This may take a few seconds.');
+    await new Promise(resolve=>setTimeout(resolve,30));
     const backup=makeBackupObject();
     const encrypted=await encryptBackupObject(backup,pass);
-    downloadTextFile('QuestTracker-Backup-'+new Date().toISOString().slice(0,10)+'.qtbackup',JSON.stringify(encrypted,null,2),'application/octet-stream');
+    downloadTextFile('QuestTracker-Backup-'+new Date().toISOString().slice(0,10)+'.qtbackup',JSON.stringify(encrypted,null,2),'application/json;charset=utf-8');
     save();
     localStorage.setItem('dq_lastbackup',Date.now().toString());
-    showEB('Encrypted backup exported successfully. Keep the password safe — it cannot be recovered.');
+    showEB('Encrypted backup created. If it did not download automatically, use the gold manual download link at the bottom of the screen.');
   }catch(err){showEB('Error creating encrypted backup: '+err.message);}
 }
 
@@ -1980,7 +2007,7 @@ function importBackup(){
       try{
         let data=JSON.parse(ev.target.result);
         if(data&&data.format===QT_BACKUP_FORMAT&&data.encrypted){
-          if(!crypto.subtle){showEB('Encrypted import requires HTTPS or a secure browser context. Use the GitHub Pages version, not a local file.');return;}
+          if(!window.crypto||!crypto.subtle){showEB('Encrypted import requires HTTPS or a secure browser context. Use the GitHub Pages version, not a local file.');return;}
           const pass=prompt('Enter the backup password.');
           if(!pass)return;
           data=await decryptBackupObject(data,pass);
@@ -2006,9 +2033,17 @@ function checkBackupReminder(){
 function randomStudentPicker(){
   const cls=pcState.cls||acls;
   let pool=filt(cls);
-  // Optionally filter out absent students (from current attendance state)
+  // Optionally filter out absent students. During an active challenge, ask once per newly started challenge.
   const attState=attStates[cls];
-  const filterAbsent=confirm('Exclude absent students?');
+  let filterAbsent=false;
+  if(pcState.active&&pcState.cls===cls){
+    if(pcState.pickerExcludeAbsent===null||pcState.pickerExcludeAbsent===undefined){
+      pcState.pickerExcludeAbsent=confirm('Exclude absent students from the random picker for this challenge?');
+    }
+    filterAbsent=!!pcState.pickerExcludeAbsent;
+  }else{
+    filterAbsent=confirm('Exclude absent students?');
+  }
   if(filterAbsent&&attState&&attState.absent){
     pool=pool.filter(s=>!attState.absent.has(s.id));
   }
@@ -2035,7 +2070,7 @@ function randomStudentPicker(){
       <div style="font-family:'Cinzel',serif;font-size:28px;color:var(--MD);margin-bottom:8px;">${picked.name}</div>
       <div style="font-size:16px;color:var(--INK3);">${rk.icon} ${rk.name} · Level ${picked.lv}</div>
       <div style="margin-top:1.5rem;display:flex;gap:8px;justify-content:center;">
-        <button class="btn bm" onclick="randomStudentPicker();document.getElementById('PICKER-MO').style.display='none';">🎲 Pick Again</button>
+        <button class="btn bm" onclick="randomStudentPicker();">🎲 Pick Again</button>
         <button class="btn bo" onclick="document.getElementById('PICKER-MO').style.display='none'">Close</button>
       </div>
     </div>
@@ -3034,7 +3069,8 @@ document.addEventListener('DOMContentLoaded',function(){
 let pcState={
   active:false,cls:'All',needed:1,xp:25,prize:'',
   timerMin:0,timerEnd:null,timerInterval:null,
-  tally:{},absent:new Set(),awarded:false
+  tally:{},absent:new Set(),awarded:false,
+  pickerExcludeAbsent:null
 };
 
 // Sync challenge state to localStorage so the Chrome extension can read it
@@ -3147,7 +3183,7 @@ function startChallenge(){
   pcState.timerMin=parseInt(document.getElementById('pc-timer-min').value)||0;
   const list=filt(pcState.cls);
   if(!list.length){showEB('No students in the selected class.');return;}
-  pcState.tally={};pcState.absent=new Set();pcState.awarded=false;pcState.active=true;
+  pcState.tally={};pcState.absent=new Set();pcState.awarded=false;pcState.active=true;pcState.pickerExcludeAbsent=null;
   list.forEach(s=>{pcState.tally[s.id]=0;});
   document.getElementById('pc-setup').style.display='none';
   document.getElementById('pc-active').style.display='block';
@@ -3257,7 +3293,7 @@ function awardChallengeXP(){
 
 function resetChallenge(){
   if(pcState.timerInterval)clearInterval(pcState.timerInterval);
-  pcState.active=false;pcState.tally={};pcState.absent=new Set();pcState.awarded=false;
+  pcState.active=false;pcState.tally={};pcState.absent=new Set();pcState.awarded=false;pcState.pickerExcludeAbsent=null;
   syncPCState();
   document.getElementById('pc-setup').style.display='block';
   document.getElementById('pc-active').style.display='none';
