@@ -866,6 +866,11 @@ html,body{scroll-behavior:auto;}
               <button class="btn bo bsm" onclick="firebaseTeacherSignOut()">Firebase Sign Out</button>
             </div>
             <div id="firebase-teacher-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;">Teacher access: not checked yet.</div>
+            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn bg bsm" onclick="runFirestoreHelperTest()">Run Database Helper Test</button>
+              <button class="btn bo bsm" onclick="showFirestorePathPlan()">Show Database Path Plan</button>
+            </div>
+            <div id="firebase-helper-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;margin-top:8px;white-space:pre-wrap;">Database helpers: not tested yet.</div>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
@@ -1149,6 +1154,115 @@ window.addEventListener('qt-firebase-ready',()=>setTimeout(()=>refreshFirebaseSt
 window.addEventListener('qt-firebase-error',()=>setTimeout(()=>refreshFirebaseStatus(true),100));
 window.addEventListener('qt-firebase-auth-changed',()=>setTimeout(()=>refreshFirebaseStatus(true),100));
 
+
+
+function setFirebaseHelperStatus(msg,color){
+  const el=document.getElementById('firebase-helper-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+}
+
+function getCurrentFirebaseEmail(){
+  const fb=getFirebaseObjects();
+  return (fb.currentUser?.email||'').toLowerCase();
+}
+
+function safeFirestoreId(value){
+  return String(value||'')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g,'_')
+    .replace(/^_+|_+$/g,'') || 'unknown';
+}
+
+const QT_DB_PATHS={
+  teacherConfig:'appConfig/teachers',
+  teacherProfiles:'teachers/{teacherId}',
+  classes:'classes/{classId}',
+  students:'students/{studentId}',
+  xpLogs:'xpLogs/{logId}',
+  assignmentAwards:'assignments/{assignmentAwardId}',
+  quests:'quests/{questId}',
+  settings:'settings/global',
+  migrationChecks:'migrationChecks/{teacherId}'
+};
+
+function showFirestorePathPlan(){
+  const lines=[
+    'Database path plan:',
+    '• appConfig/teachers — approved teacher emails',
+    '• teachers/{teacherId} — teacher profile/settings later',
+    '• classes/{classId} — class periods/courses',
+    '• students/{studentId} — current student totals/profile',
+    '• xpLogs/{logId} — detailed XP history',
+    '• assignments/{assignmentAwardId} — Google Classroom XP award records',
+    '• quests/{questId} — quest board items',
+    '• settings/global — ranks, levels, XP categories, badges, rewards',
+    '• migrationChecks/{teacherId} — harmless database write/read test'
+  ];
+  setFirebaseHelperStatus(lines.join('\n'),'#1A6B2A');
+}
+
+async function ensureApprovedFirebaseTeacher(){
+  const fb=getFirebaseObjects();
+  if(!fb.currentUser)throw new Error('Not signed into Firebase. Click “Sign in with Firebase” first.');
+  const ok=await checkFirebaseTeacherAccess();
+  if(!ok)throw new Error('This Firebase account is not approved as a teacher.');
+  return fb.currentUser;
+}
+
+async function saveMigrationCheck(){
+  const fb=getFirebaseObjects();
+  const user=await ensureApprovedFirebaseTeacher();
+  const email=(user.email||'').toLowerCase();
+  const teacherId=safeFirestoreId(email);
+  const ref=fb.sdk.doc(fb.db,'migrationChecks',teacherId);
+  const payload={
+    type:'step9_database_helper_test',
+    teacherEmail:email,
+    teacherId,
+    projectId:fb.config?.projectId||null,
+    browserTimestamp:new Date().toISOString(),
+    serverTimestamp:fb.sdk.serverTimestamp(),
+    source:'Quest Tracker Firebase Step 9',
+    note:'This is a harmless connection test. It contains no student data.'
+  };
+  await fb.sdk.setDoc(ref,payload,{merge:true});
+  return {ref,teacherId,email};
+}
+
+async function readMigrationCheck(teacherId){
+  const fb=getFirebaseObjects();
+  const ref=fb.sdk.doc(fb.db,'migrationChecks',teacherId);
+  const snap=await fb.sdk.getDoc(ref);
+  if(!snap.exists())throw new Error('Migration check document was not found after writing.');
+  return snap.data();
+}
+
+async function runFirestoreHelperTest(){
+  try{
+    setFirebaseHelperStatus('Database helpers: checking teacher access and writing harmless test record...','#7A5500');
+    const result=await saveMigrationCheck();
+    setFirebaseHelperStatus('Database helpers: write succeeded. Reading test record back...','#7A5500');
+    const data=await readMigrationCheck(result.teacherId);
+    const msg=[
+      'Database helpers: SUCCESS.',
+      'Firestore write/read test passed.',
+      'Signed-in teacher: '+result.email,
+      'Test path: migrationChecks/'+result.teacherId,
+      'Project: '+(data.projectId||'unknown'),
+      'No student data was written.'
+    ].join('\n');
+    setFirebaseHelperStatus(msg,'#1A6B2A');
+    showEB('Firestore helper test passed. No student data was written.');
+    return true;
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    const msg='Database helpers: FAILED'+code+'. '+(e?.message||e)+'\n\nIf this is permission-denied, publish the Step 9 Firestore rules that allow approved teachers to read/write migrationChecks.';
+    setFirebaseHelperStatus(msg,'#8B1A1A');
+    showEB('Firestore helper test failed'+code+'. Check the helper status box.');
+    return false;
+  }
+}
 
 function getTeacherEmails(){return[];}// No longer used for access control
 
