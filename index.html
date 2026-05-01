@@ -2028,10 +2028,10 @@ function restoreBackupData(data){
 async function exportBackup(){
   try{
     if(!window.crypto||!crypto.subtle){showEB('Encrypted backup requires HTTPS or a secure browser context. Use the GitHub Pages version, not a local file.');return;}
-    const pass=prompt('Create a backup password. You will need this password to import this backup later.');
+    const pass=prompt('Create a backup password. Use at least 8 characters. You will need this password to import this backup later.');
     if(!pass)return;
-    if(pass.length<8){showEB('Backup password must be at least 8 characters.');return;}
-    const pass2=prompt('Re-enter the backup password to confirm.');
+    if(pass.length<8){showEB('Backup password must be at least 8 characters. No backup was created.');alert('Backup password must be at least 8 characters. No backup was created.');return;}
+    const pass2=prompt('Re-enter the backup password to confirm. It must match exactly.');
     if(pass!==pass2){showEB('Backup passwords did not match. Backup canceled.');return;}
     showEB('Creating encrypted backup… This may take a few seconds.');
     await new Promise(resolve=>setTimeout(resolve,30));
@@ -2056,7 +2056,7 @@ function importBackup(){
         let data=JSON.parse(ev.target.result);
         if(data&&data.format===QT_BACKUP_FORMAT&&data.encrypted){
           if(!window.crypto||!crypto.subtle){showEB('Encrypted import requires HTTPS or a secure browser context. Use the GitHub Pages version, not a local file.');return;}
-          const pass=prompt('Enter the backup password.');
+          const pass=prompt('Enter the backup password. It must be at least 8 characters.');
           if(!pass)return;
           data=await decryptBackupObject(data,pass);
         }else if(!confirm('This appears to be an older unencrypted JSON backup. Import it anyway?')){
