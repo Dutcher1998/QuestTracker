@@ -853,6 +853,15 @@ html,body{scroll-behavior:auto;}
             <button class="btn bm bsm" onclick="exportBackup()">⬇️ Export Encrypted Backup</button>
             <button class="btn bo bsm" onclick="importBackup()">⬆️ Import Backup</button>
           </div>
+
+          <hr style="border:none;border-top:1px solid var(--BDG);"/>
+          <div>
+            <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Firebase database prep</div>
+            <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Firebase is now wired into this app, but local storage is still the source of truth until we migrate each data type.</div>
+            <div id="firebase-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;margin-bottom:8px;">Firebase status: checking...</div>
+            <button class="btn bo bsm" onclick="refreshFirebaseStatus()">Check Firebase Status</button>
+          </div>
+
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
           <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Full session reset</div>
             <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Clears ALL data — roster, XP, settings, saved periods, attendance — and signs you out. Use to start completely fresh as a new user.</div>
@@ -982,11 +991,78 @@ html,body{scroll-behavior:auto;}
   </div>
 </div>
 
+<!-- Firebase setup for future database migration -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+  import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDoOB0VBx6AA0n4tDG79fD_niF28XPJwj8",
+    authDomain: "quest-tracker-e1554.firebaseapp.com",
+    projectId: "quest-tracker-e1554",
+    storageBucket: "quest-tracker-e1554.firebasestorage.app",
+    messagingSenderId: "529258739612",
+    appId: "1:529258739612:web:7fa5a364f513d85443ba59"
+  };
+
+  try {
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const googleProvider = new GoogleAuthProvider();
+
+    window.QT_FIREBASE = {
+      ready: true,
+      error: null,
+      config: firebaseConfig,
+      app,
+      auth,
+      db,
+      googleProvider,
+      sdk: {
+        GoogleAuthProvider, signInWithPopup, firebaseSignOut, onAuthStateChanged,
+        collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, orderBy, limit
+      }
+    };
+    window.dispatchEvent(new CustomEvent('qt-firebase-ready', { detail: window.QT_FIREBASE }));
+  } catch (error) {
+    console.error('Quest Tracker Firebase initialization failed:', error);
+    window.QT_FIREBASE = { ready: false, error: error?.message || String(error) };
+    window.dispatchEvent(new CustomEvent('qt-firebase-error', { detail: window.QT_FIREBASE }));
+  }
+</script>
+
 <script>
 const GCL_ID='249246305432-o4ukh4lim7k2lfq6hlr3rked9ma5vhe2.apps.googleusercontent.com';
 // DOMAIN-BASED ACCESS CONTROL — no configuration needed
 const TEACHER_DOMAINS=['deruytercentral.org'];
 const STUDENT_DOMAINS=['deruyterrockets.org'];
+
+function refreshFirebaseStatus(silent){
+  const el=document.getElementById('firebase-status');
+  const fb=window.QT_FIREBASE;
+  let msg='Firebase status: not checked yet.';
+  let color='var(--INK3)';
+
+  if(fb&&fb.ready){
+    msg='Firebase status: connected to project "'+(fb.config?.projectId||'unknown')+'". Auth and Firestore SDKs are loaded. Local storage is still active until the database migration is turned on.';
+    color='#1A6B2A';
+  }else if(fb&&fb.error){
+    msg='Firebase status: initialization error — '+fb.error;
+    color='#8B1A1A';
+  }else{
+    msg='Firebase status: still loading. If this stays here, refresh the page or check that the page is served over HTTPS.';
+    color='#7A5500';
+  }
+
+  if(el){el.textContent=msg;el.style.color=color;}
+  if(!silent&&typeof showEB==='function')showEB(msg);
+}
+
+window.addEventListener('qt-firebase-ready',()=>setTimeout(()=>refreshFirebaseStatus(true),100));
+window.addEventListener('qt-firebase-error',()=>setTimeout(()=>refreshFirebaseStatus(true),100));
+
 
 function getTeacherEmails(){return[];}// No longer used for access control
 
@@ -2789,6 +2865,7 @@ function completeSignIn(){
     setTimeout(initAutoSync,1000);
     setTimeout(checkFirstRun,500);
     setTimeout(checkBackupReminder,5000);
+    setTimeout(()=>refreshFirebaseStatus(true),1200);
   } else {
     document.getElementById('TV').style.display='none';
     document.getElementById('SV').style.display='block';
