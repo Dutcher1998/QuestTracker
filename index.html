@@ -891,6 +891,16 @@ html,body{scroll-behavior:auto;}
               </div>
               <div id="firebase-students-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Student profile migration: not tested yet.</div>
             </div>
+            <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--BDG);">
+              <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Step 12: XP log migration</div>
+              <div style="font-size:12px;color:var(--INK3);margin-bottom:8px;">This uploads each student's XP history entries as audit records. Exact grade percentages stay minimized; assignment-related records use score bands such as submitted, 85%+, and perfect score.</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <button class="btn bo bsm" onclick="previewXpLogMigration()">Preview XP Logs</button>
+                <button class="btn bm bsm" onclick="uploadXpLogsToFirestore()">Upload XP Logs to Firestore</button>
+                <button class="btn bg bsm" onclick="compareLocalVsFirestoreXpLogs()">Compare Local vs Firestore XP Logs</button>
+              </div>
+              <div id="firebase-xplogs-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">XP log migration: not tested yet.</div>
+            </div>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
@@ -1595,6 +1605,212 @@ async function compareLocalVsFirestoreStudents(){
     const code=e?.code?(' ['+e.code+']') : '';
     setFirebaseStudentsStatus('Student profile comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
     showEB('Student profile comparison failed'+code+'. Check the student migration box.');
+  }
+}
+
+
+function setFirebaseXpLogsStatus(msg,color){
+  const el=document.getElementById('firebase-xplogs-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+}
+
+function simpleHash32(text){
+  let h=2166136261;
+  const s=String(text||'');
+  for(let i=0;i<s.length;i++){
+    h^=s.charCodeAt(i);
+    h=Math.imul(h,16777619);
+  }
+  return (h>>>0).toString(36);
+}
+
+function inferXpSourceFromReason(reason){
+  const r=String(reason||'').toLowerCase();
+  if(r.includes('attendance'))return 'attendance';
+  if(r.includes('class challenge'))return 'class_challenge';
+  if(r.includes('submitted')||r.includes('85%+')||r.includes('perfect score')||r.includes('grade updated'))return 'google_classroom_assignment';
+  if(r.includes('manual'))return 'manual';
+  return 'xp_award';
+}
+
+function inferScoreBandFromReason(reason){
+  const r=String(reason||'').toLowerCase();
+  if(r.includes('perfect score'))return 'PERFECT';
+  if(r.includes('85%+'))return 'EIGHTY_FIVE_PLUS';
+  if(r.includes('below 85'))return 'BELOW_85';
+  if(r.includes('submitted'))return 'SUBMITTED_ONLY';
+  return null;
+}
+
+function makeXpLogId(studentId,entry){
+  const reason=sanitizeGradeText(entry?.reason||'');
+  const core=[studentId,entry?.date||'',entry?.time||'',entry?.amt||0,reason].join('|');
+  return safeFirestoreId(studentId)+'_'+simpleHash32(core);
+}
+
+function makeXpLogForFirestore(student,entry){
+  const cleanReason=sanitizeGradeText(entry?.reason||'');
+  const amount=Number(entry?.amt||0);
+  const scoreBand=inferScoreBandFromReason(cleanReason);
+  const source=inferXpSourceFromReason(cleanReason);
+  const logId=makeXpLogId(student.id,entry);
+  return {
+    schemaVersion:1,
+    id:logId,
+    studentId:String(student.id||''),
+    studentName:String(student.name||''),
+    className:String(student.cls||student.className||''),
+    classId:safeFirestoreId(student.cls||student.className||'unassigned'),
+    amount,
+    reason:cleanReason||'XP award',
+    source,
+    scoreBand,
+    date:String(entry?.date||''),
+    time:String(entry?.time||''),
+    teacherEmail:getCurrentFirebaseEmail()||null,
+    updatedAtClient:new Date().toISOString(),
+    sourceSystem:'Quest Tracker xpLogs/{logId} Step 12 XP history migration',
+    containsStudentProfileData:true,
+    containsExactGradePercentage:false
+  };
+}
+
+function comparableXpLog(log){
+  return {
+    schemaVersion:log?.schemaVersion||1,
+    id:String(log?.id||''),
+    studentId:String(log?.studentId||''),
+    studentName:String(log?.studentName||''),
+    className:String(log?.className||''),
+    classId:String(log?.classId||safeFirestoreId(log?.className||'unassigned')),
+    amount:Number(log?.amount||0),
+    reason:sanitizeGradeText(String(log?.reason||'')),
+    source:String(log?.source||inferXpSourceFromReason(log?.reason||'')),
+    scoreBand:log?.scoreBand||inferScoreBandFromReason(log?.reason||'')||null,
+    date:String(log?.date||''),
+    time:String(log?.time||''),
+    containsExactGradePercentage:log?.containsExactGradePercentage===true?true:false
+  };
+}
+
+function getLocalXpLogsForFirestore(){
+  const results=[];
+  students.forEach(student=>{
+    const hist=Array.isArray(student.hist)?student.hist:[];
+    hist.forEach(entry=>{
+      if(!entry)return;
+      const log=makeXpLogForFirestore(student,entry);
+      if(log.studentId&&log.id&&log.amount!==0)results.push(log);
+    });
+  });
+  const unique=new Map();
+  results.forEach(log=>unique.set(log.id,log));
+  return [...unique.values()];
+}
+
+function previewXpLogMigration(){
+  try{
+    sanitizeStoredGradeDetails();
+    const logs=getLocalXpLogsForFirestore();
+    const bySource={};
+    logs.forEach(l=>{bySource[l.source]=(bySource[l.source]||0)+1;});
+    const sample=logs.slice(0,5).map(l=>'• '+l.studentName+' — +'+l.amount+' — '+l.reason+' — '+(l.date||'no date')+' '+(l.time||'')).join('\n');
+    setFirebaseXpLogsStatus([
+      'XP log migration preview:',
+      'Local XP history entries ready: '+logs.length,
+      'Will upload to: xpLogs/{logId}',
+      'Sources: '+(Object.keys(bySource).length?Object.entries(bySource).map(([k,v])=>k+'='+v).join(', '):'none'),
+      'Exact grade percentages are not stored; assignment records use score bands where detectable.',
+      sample?'Sample:\n'+sample:'No XP logs found.'
+    ].join('\n'),'#7A5500');
+  }catch(e){
+    setFirebaseXpLogsStatus('XP log preview FAILED. '+(e?.message||e),'#8B1A1A');
+  }
+}
+
+async function uploadXpLogsToFirestore(){
+  try{
+    setFirebaseXpLogsStatus('XP log migration: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    sanitizeStoredGradeDetails();
+    const logs=getLocalXpLogsForFirestore();
+    if(!logs.length)throw new Error('No local XP history entries found to upload.');
+    const msg='Upload '+logs.length+' XP history records to Firestore?\n\nThis WILL upload student names, class names, XP amounts, reasons, and dates/times from each student history.\n\nThis will NOT upload exact grade percentages. Assignment-related records use score bands where detectable.';
+    if(!confirm(msg))return;
+    const fb=getFirebaseObjects();
+    setFirebaseXpLogsStatus('XP log migration: uploading '+logs.length+' records to xpLogs/{logId}...','#7A5500');
+    const chunks=[];
+    for(let i=0;i<logs.length;i+=400)chunks.push(logs.slice(i,i+400));
+    for(let c=0;c<chunks.length;c++){
+      const batch=fb.sdk.writeBatch(fb.db);
+      chunks[c].forEach(log=>{
+        const payload={...log,updatedAt:fb.sdk.serverTimestamp()};
+        const ref=fb.sdk.doc(fb.db,'xpLogs',log.id);
+        batch.set(ref,payload,{merge:true});
+      });
+      await batch.commit();
+      setFirebaseXpLogsStatus('XP log migration: uploaded batch '+(c+1)+' of '+chunks.length+'...','#7A5500');
+    }
+    setFirebaseXpLogsStatus([
+      'XP log migration: SUCCESS.',
+      'Uploaded XP history records: '+logs.length,
+      'Firestore path: xpLogs/{logId}',
+      'Exact grade percentages were NOT uploaded.',
+      'Next recommended check: Compare Local vs Firestore XP Logs.'
+    ].join('\n'),'#1A6B2A');
+    showEB('XP logs uploaded to Firestore. Exact grade percentages were not uploaded.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseXpLogsStatus('XP log upload FAILED'+code+'. '+(e?.message||e)+'\n\nIf this says permission-denied, publish the Step 12 rules that allow approved teachers to read/write xpLogs/{logId}.','#8B1A1A');
+    showEB('XP log upload failed'+code+'. Check the XP log migration box.');
+  }
+}
+
+async function compareLocalVsFirestoreXpLogs(){
+  try{
+    setFirebaseXpLogsStatus('XP log comparison: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    const fb=getFirebaseObjects();
+    sanitizeStoredGradeDetails();
+    const localLogs=getLocalXpLogsForFirestore();
+    if(!localLogs.length)throw new Error('No local XP history entries found to compare.');
+    setFirebaseXpLogsStatus('XP log comparison: reading Firestore xpLogs collection...','#7A5500');
+    const snap=await fb.sdk.getDocs(fb.sdk.collection(fb.db,'xpLogs'));
+    const remoteMap=new Map();
+    snap.forEach(d=>remoteMap.set(d.id,d.data()));
+    const missing=[];
+    const different=[];
+    localLogs.forEach(local=>{
+      const remote=remoteMap.get(local.id);
+      if(!remote){missing.push(local.studentName+' — '+local.reason);return;}
+      const a=stableStringify(comparableXpLog(local));
+      const b=stableStringify(comparableXpLog(remote));
+      if(a!==b)different.push(local.studentName+' — '+local.reason);
+    });
+    const extra=[];
+    remoteMap.forEach((remote,id)=>{
+      if(!localLogs.some(local=>local.id===id))extra.push((remote?.studentName||'Unknown')+' — '+(remote?.reason||id));
+    });
+    const match=missing.length===0&&different.length===0&&extra.length===0;
+    const lines=[
+      match?'XP log comparison: MATCH.':'XP log comparison: DIFFERENCES FOUND.',
+      'Firestore path: xpLogs/{logId}',
+      'Local XP logs: '+localLogs.length,
+      'Firestore XP logs: '+remoteMap.size,
+      'Missing in Firestore: '+missing.length,
+      'Different logs: '+different.length,
+      'Extra Firestore logs: '+extra.length,
+      'Compared student XP history records only. Exact grade percentages were not compared or stored.'
+    ];
+    if(missing.length)lines.push('Missing sample: '+missing.slice(0,5).join('; '));
+    if(different.length)lines.push('Different sample: '+different.slice(0,5).join('; '));
+    if(extra.length)lines.push('Extra sample: '+extra.slice(0,5).join('; '));
+    setFirebaseXpLogsStatus(lines.join('\n'),match?'#1A6B2A':'#7A5500');
+    showEB(match?'Local XP logs match Firestore.':'XP log comparison found differences.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseXpLogsStatus('XP log comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+    showEB('XP log comparison failed'+code+'. Check the XP log migration box.');
   }
 }
 
