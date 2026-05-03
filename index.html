@@ -948,6 +948,15 @@ html,body{scroll-behavior:auto;}
               </div>
               <div id="firebase-fullsync-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Full database sync prep: not tested yet.</div>
               <div id="firebase-live-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;margin-top:8px;white-space:pre-wrap;">Live Database Mode: not started. Local storage is still the safety cache.</div>
+              <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--BDG);">
+                <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Step 16: student-facing database access</div>
+                <div style="font-size:12px;color:var(--INK3);margin-bottom:8px;">Publishes a minimized student-safe view to Firestore. Students can read public leaderboard/profile data and Quest Board items, but not teacher tools, assignment sync records, attendance records, or XP audit logs.</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                  <button class="btn bm bsm" onclick="publishStudentFacingDataToFirestore()">Publish Student View Data</button>
+                  <button class="btn bg bsm" onclick="compareStudentFacingData()">Compare Student View Data</button>
+                </div>
+                <div id="firebase-student-access-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;white-space:pre-wrap;">Student-facing access: not published yet.</div>
+              </div>
             </div>
           </div>
 
@@ -1257,6 +1266,7 @@ const QT_DB_PATHS={
   teacherProfiles:'teachers/{teacherId}',
   classes:'classes/{classId}',
   students:'students/{studentId}',
+  publicStudents:'publicStudents/{studentId}',
   xpLogs:'xpLogs/{logId}',
   assignmentAwards:'assignments/{assignmentAwardId}',
   quests:'quests/{questId}',
@@ -1552,6 +1562,184 @@ function comparableStudentProfile(profile){
 
 function getLocalStudentProfilesForFirestore(){
   return students.map(makeStudentProfileForFirestore).filter(s=>s.id&&s.name);
+}
+
+function makePublicStudentProfileForFirestore(s){
+  const xp=Number(s?.xp||0);
+  const level=Number(s?.lv||s?.level||1);
+  return {
+    schemaVersion:1,
+    id:String(s?.id||''),
+    name:String(s?.name||''),
+    firstName:String(s?.name||'').trim().split(/\s+/)[0]||'',
+    normalizedName:String(s?.name||'').trim().toLowerCase(),
+    className:String(s?.cls||s?.className||''),
+    classId:safeFirestoreId(s?.cls||s?.className||'unassigned'),
+    xp,
+    level,
+    totalEarned:Number(s?.te||s?.totalEarned||xp),
+    badges:Array.isArray(s?.badges)?clonePlain(s.badges):[],
+    seasonBadges:(s?.seasonBadges&&typeof s.seasonBadges==='object')?clonePlain(s.seasonBadges):{},
+    avatarIndex:Number.isFinite(Number(s?.ai))?Number(s.ai):null,
+    avatarIcon:s?.avatarIcon?String(s.avatarIcon):null,
+    motto:s?.motto?String(s.motto):'',
+    pictureUrl:s?.pic?String(s.pic):null,
+    active:s?.active===false?false:true,
+    updatedAtClient:new Date().toISOString(),
+    updatedBy:getCurrentFirebaseEmail()||null,
+    source:'Quest Tracker publicStudents/{studentId} student-safe view',
+    studentSafeView:true,
+    containsGoogleClassroomId:false,
+    containsAttendanceRecord:false,
+    containsDetailedXpHistory:false,
+    containsAssignmentGradeDetails:false
+  };
+}
+
+function comparablePublicStudentProfile(profile){
+  return {
+    schemaVersion:profile?.schemaVersion||1,
+    id:String(profile?.id||''),
+    name:String(profile?.name||''),
+    firstName:String(profile?.firstName||String(profile?.name||'').trim().split(/\s+/)[0]||''),
+    normalizedName:String(profile?.normalizedName||String(profile?.name||'').trim().toLowerCase()),
+    className:String(profile?.className||''),
+    classId:String(profile?.classId||safeFirestoreId(profile?.className||'unassigned')),
+    xp:Number(profile?.xp||0),
+    level:Number(profile?.level||1),
+    totalEarned:Number(profile?.totalEarned||profile?.xp||0),
+    badges:Array.isArray(profile?.badges)?clonePlain(profile.badges):[],
+    seasonBadges:(profile?.seasonBadges&&typeof profile.seasonBadges==='object')?clonePlain(profile.seasonBadges):{},
+    avatarIndex:Number.isFinite(Number(profile?.avatarIndex))?Number(profile.avatarIndex):null,
+    avatarIcon:profile?.avatarIcon?String(profile.avatarIcon):null,
+    motto:profile?.motto?String(profile.motto):'',
+    pictureUrl:profile?.pictureUrl?String(profile.pictureUrl):null,
+    active:profile?.active===false?false:true
+  };
+}
+
+function getLocalPublicStudentProfilesForFirestore(){
+  return students.map(makePublicStudentProfileForFirestore).filter(s=>s.id&&s.name&&s.active!==false);
+}
+
+function publicStudentProfileToLocalStudent(p){
+  return {
+    id:String(p.id||''),
+    name:String(p.name||''),
+    xp:Number(p.xp||0),
+    lv:Number(p.level||1),
+    te:Number(p.totalEarned||p.xp||0),
+    badges:Array.isArray(p.badges)?clonePlain(p.badges):[],
+    ai:Number.isFinite(Number(p.avatarIndex))?Number(p.avatarIndex):0,
+    gid:null,
+    cls:String(p.className||''),
+    pic:p.pictureUrl?String(p.pictureUrl):null,
+    hist:[],
+    seasonBadges:(p.seasonBadges&&typeof p.seasonBadges==='object')?clonePlain(p.seasonBadges):{},
+    attendanceDays:0,
+    motto:p.motto?String(p.motto):'',
+    avatarIcon:p.avatarIcon?String(p.avatarIcon):undefined,
+    active:p.active===false?false:true
+  };
+}
+
+function setFirebaseStudentAccessStatus(msg,color){
+  const el=document.getElementById('firebase-student-access-status');
+  if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+}
+
+async function publishStudentFacingDataToFirestore(){
+  try{
+    setFirebaseStudentAccessStatus('Student-facing access: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    const profiles=getLocalPublicStudentProfilesForFirestore();
+    const msg='Publish '+profiles.length+' student-safe profiles to Firestore?\n\nThis writes to publicStudents/{studentId}.\n\nIt includes public leaderboard/profile fields: name, class, XP, level, badges, avatar, and motto.\n\nIt does NOT include Google Classroom IDs, attendance records, assignment sync records, exact grades, or XP audit history.';
+    if(!confirm(msg))return;
+    const fb=getFirebaseObjects();
+    setFirebaseStudentAccessStatus('Student-facing access: publishing publicStudents/{studentId}...','#7A5500');
+    await replaceCollectionFromLocal('publicStudents',profiles,comparablePublicStudentProfile);
+    await fb.sdk.setDoc(fb.sdk.doc(fb.db,'databaseMeta','studentAccess'),{
+      enabled:true,
+      lastPublishedAt:fb.sdk.serverTimestamp(),
+      lastPublishedAtClient:new Date().toISOString(),
+      lastPublishedBy:fb.currentUser?.email||null,
+      publicStudentCount:profiles.length,
+      notes:'Students may read publicStudents, quests, and settings/global only. Teacher-only records remain restricted by Firestore rules.',
+      localFallbackEnabled:true
+    },{merge:true});
+    setFirebaseStudentAccessStatus([
+      'Student-facing access: SUCCESS.',
+      'Published student-safe profiles: '+profiles.length,
+      'Firestore path: publicStudents/{studentId}',
+      'Restricted data excluded: Google Classroom IDs, attendance records, assignment sync records, exact grades, and XP audit logs.'
+    ].join('\n'),'#1A6B2A');
+    showEB('Student View data published to Firestore.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseStudentAccessStatus('Student-facing publish FAILED'+code+'. '+(e?.message||e)+'\n\nIf this says permission-denied, publish the Step 16 Firestore rules that allow approved teachers to write publicStudents/{studentId}.','#8B1A1A');
+    showEB('Student View data publish failed'+code+'.');
+  }
+}
+
+async function compareStudentFacingData(){
+  try{
+    setFirebaseStudentAccessStatus('Student-facing comparison: checking teacher access...','#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    const local=getLocalPublicStudentProfilesForFirestore();
+    const remote=await getCollectionMap('publicStudents');
+    const result=compareMaps(local,remote,comparablePublicStudentProfile,p=>p.name||p.id);
+    setFirebaseStudentAccessStatus([
+      'Student-facing comparison: '+(result.match?'MATCH':'DIFFERENCES FOUND')+'.',
+      'Firestore path: publicStudents/{studentId}',
+      'Local public profiles: '+result.localCount,
+      'Firestore public profiles: '+result.remoteCount,
+      'Missing in Firestore: '+result.missing.length,
+      'Different profiles: '+result.different.length,
+      'Extra Firestore profiles: '+result.extra.length,
+      'Restricted data was not compared or stored in publicStudents.'
+    ].join('\n'),result.match?'#1A6B2A':'#8B1A1A');
+    showEB(result.match?'Student View data matches Firestore.':'Student View data comparison found differences.');
+  }catch(e){
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseStudentAccessStatus('Student-facing comparison FAILED'+code+'. '+(e?.message||e),'#8B1A1A');
+    showEB('Student View comparison failed'+code+'.');
+  }
+}
+
+async function loadStudentFacingDataFromFirestore(){
+  const fb=getFirebaseObjects();
+  if(!fb.currentUser)throw new Error('Firebase is not signed in.');
+  const email=(fb.currentUser.email||'').toLowerCase();
+  if(!isStudentEmail(email))return false;
+
+  const metaSnap=await fb.sdk.getDoc(fb.sdk.doc(fb.db,'databaseMeta','studentAccess'));
+  if(!metaSnap.exists()||metaSnap.data()?.enabled!==true)throw new Error('Student access is not enabled yet. Ask your teacher to publish Student View data.');
+
+  // Apply shared display settings so ranks, levels, and badges match the teacher app.
+  const settingsSnap=await fb.sdk.getDoc(fb.sdk.doc(fb.db,'settings','global'));
+  if(settingsSnap.exists())applyGlobalSettingsObject(settingsSnap.data());
+
+  const studentSnap=await fb.sdk.getDocs(fb.sdk.collection(fb.db,'publicStudents'));
+  students=[];
+  studentSnap.forEach(d=>students.push(publicStudentProfileToLocalStudent({id:d.id,...d.data()})));
+
+  const questSnap=await fb.sdk.getDocs(fb.sdk.collection(fb.db,'quests'));
+  quests=[];
+  questSnap.forEach(d=>{
+    const q=d.data();
+    quests.push({
+      id:q.id||d.id,
+      title:q.title||'',
+      desc:q.description||q.desc||'',
+      icon:q.icon||'📋',
+      xp:Number(q.xp||0),
+      deadline:q.deadline||'',
+      active:q.active!==false
+    });
+  });
+
+  curSid=matchUser(curUser);
+  return true;
 }
 
 function previewStudentProfileMigration(){
@@ -2805,6 +2993,7 @@ async function pushFullLocalStateToFirestore(reason){
     },{merge:false});
 
     await replaceCollectionFromLocal('students',getLocalStudentProfilesForFirestore(),comparableStudentProfile);
+    await replaceCollectionFromLocal('publicStudents',getLocalPublicStudentProfilesForFirestore(),comparablePublicStudentProfile);
     await replaceCollectionFromLocal('xpLogs',getLocalXpLogsForFirestore(),comparableXpLog);
     await replaceCollectionFromLocal('assignments',getLocalAssignmentAwardsForFirestore(),comparableAssignmentAward);
     await replaceCollectionFromLocal('quests',getLocalQuestsForFirestore(),comparableQuest);
@@ -4852,11 +5041,23 @@ function completeSignIn(){
     setTimeout(()=>refreshFirebaseStatus(true),1200);
   } else {
     document.getElementById('TV').style.display='none';
-    document.getElementById('SV').style.display='block';
-    renderSV();
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{window.scrollTo({top:0,behavior:'instant'});});
-    });
+    const sv=document.getElementById('SV');
+    sv.style.display='block';
+    sv.innerHTML=`<div style="max-width:640px;margin:0 auto;padding:2rem 20px;"><div class="nfm"><div style="font-size:40px;margin-bottom:12px;">🚀</div><h2>Loading your Quest Tracker profile...</h2><p style="font-size:14px;color:var(--INK3);margin-top:8px;">Checking the live classroom database.</p></div></div>`;
+    const finishStudentRender=()=>{
+      curSid=matchUser(curUser);
+      renderSV();
+      requestAnimationFrame(()=>{requestAnimationFrame(()=>{window.scrollTo({top:0,behavior:'instant'});});});
+    };
+    if(window.QT_FIREBASE&&window.QT_FIREBASE.ready&&window.QT_FIREBASE.currentUser){
+      loadStudentFacingDataFromFirestore().then(()=>finishStudentRender()).catch(e=>{
+        console.warn('Student-facing Firestore load failed; falling back to local student view.',e);
+        showEB('Student database load failed. Showing local fallback if available. '+(e?.message||e));
+        finishStudentRender();
+      });
+    }else{
+      finishStudentRender();
+    }
   }
 }
 function demoMode(){
