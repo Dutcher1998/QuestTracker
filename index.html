@@ -292,6 +292,15 @@ html,body{scroll-behavior:auto;}
 #global-tip{position:fixed;background:#3D0A14;color:#F5F0E8;font-size:13px;padding:7px 12px;border-radius:7px;white-space:nowrap;z-index:9999;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,0.5);font-family:'Crimson Pro',Georgia,serif;display:none;max-width:300px;}
 #global-tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#3D0A14;}
 
+
+.db-mode-pill{display:none;align-items:center;gap:6px;font-size:11px;font-family:'Cinzel',serif;padding:5px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:rgba(255,255,255,.65);white-space:nowrap;}
+.db-mode-pill .db-dot{width:8px;height:8px;border-radius:50%;background:#8B1A1A;display:inline-block;box-shadow:0 0 0 2px rgba(255,255,255,.08);}
+.db-mode-pill.on{display:flex;border-color:rgba(46,160,67,.55);background:rgba(46,160,67,.16);color:#DDF8E4;}
+.db-mode-pill.on .db-dot{background:#2EA043;}
+.db-mode-pill.off{display:flex;border-color:rgba(201,146,58,.45);background:rgba(201,146,58,.12);color:var(--GOL);}
+.db-mode-pill.error{display:flex;border-color:rgba(240,160,160,.7);background:rgba(139,26,26,.22);color:#FFD6D6;}
+@media(max-width:640px){.db-mode-pill{font-size:10px;padding:4px 8px}.db-mode-pill .db-mode-text{display:none}}
+
 /* ── MOBILE RESPONSIVE ── */
 @media(max-width:640px){
   .ah{height:54px;padding:0 12px;gap:6px;}
@@ -462,6 +471,7 @@ html,body{scroll-behavior:auto;}
       <div><div class="at">Quest Tracker</div><div class="as">DeRuyter Central School</div></div>
     </div>
     <div class="hr2">
+      <div id="db-mode-pill" class="db-mode-pill off" title="Database Mode status"><span class="db-dot"></span><span class="db-mode-text">Database: Local</span></div>
       <div id="UP" class="up" style="display:none;"><img id="UAV" class="uav" src="" alt=""/><span id="UNL"></span></div>
       <div id="auto-sync-indicator" style="display:none;align-items:center;gap:6px;font-size:11px;font-family:'Cinzel',serif;color:var(--GOL);">
         <span id="asi-dot" style="width:7px;height:7px;border-radius:50%;background:var(--GM);display:inline-block;"></span>
@@ -2688,6 +2698,7 @@ async function enableDatabaseModeFlag(){
     localStorage.setItem(QT_DATABASE_MODE_KEY,'true');
     await uploadDatabaseModeMetaToFirestore(true);
     setFirebaseFullSyncStatus('Database Mode flag: ENABLED. Firestore comparison matched before enabling. Local storage remains as a safety fallback in this build.','#1A6B2A');
+    updateDatabaseModeIndicator('ready','Database: Ready');
     showEB('Database Mode flag enabled.');
   }catch(e){
     const code=e?.code?(' ['+e.code+']') : '';
@@ -2701,6 +2712,7 @@ async function disableDatabaseModeFlag(){
     localStorage.setItem(QT_DATABASE_MODE_KEY,'false');
     await uploadDatabaseModeMetaToFirestore(false);
     setFirebaseFullSyncStatus('Database Mode flag: DISABLED. The app is using local storage as its active source of truth.','#7A5500');
+    updateDatabaseModeIndicator('off','Database: Local');
     showEB('Database Mode flag disabled.');
   }catch(e){
     const code=e?.code?(' ['+e.code+']') : '';
@@ -2712,6 +2724,32 @@ async function disableDatabaseModeFlag(){
 function setFirebaseLiveStatus(msg,color){
   const el=document.getElementById('firebase-live-status');
   if(el){el.textContent=msg;el.style.color=color||'var(--INK3)';}
+  updateDatabaseModeIndicator();
+}
+
+function updateDatabaseModeIndicator(stateOverride,messageOverride){
+  const pill=document.getElementById('db-mode-pill');
+  if(!pill)return;
+  const text=pill.querySelector('.db-mode-text');
+  const live=stateOverride || (isLiveDatabaseModeActive()?'on':(isDatabaseModeFlagOn()?'ready':'off'));
+  pill.classList.remove('on','off','error');
+  if(live==='on'){
+    pill.classList.add('on');
+    if(text)text.textContent=messageOverride||'Database: ON';
+    pill.title='Live Database Mode is ON. Firestore is the active source of truth; local storage remains as fallback.';
+  }else if(live==='ready'){
+    pill.classList.add('off');
+    if(text)text.textContent=messageOverride||'Database: Ready';
+    pill.title='Database Mode flag is enabled, but Live Database Mode is not active yet.';
+  }else if(live==='error'){
+    pill.classList.add('error');
+    if(text)text.textContent=messageOverride||'Database: Error';
+    pill.title='Database save/load error. Local storage fallback should still have changes.';
+  }else{
+    pill.classList.add('off');
+    if(text)text.textContent=messageOverride||'Database: Local';
+    pill.title='Local storage is the active source of truth.';
+  }
 }
 
 function isDatabaseModeFlagOn(){
@@ -2725,6 +2763,7 @@ function isLiveDatabaseModeActive(){
 function markLiveDatabaseModeActive(active){
   qtLiveDatabaseActive=!!active;
   localStorage.setItem(QT_LIVE_DATABASE_ACTIVE_KEY,active?'true':'false');
+  updateDatabaseModeIndicator(active?'on':(isDatabaseModeFlagOn()?'ready':'off'));
   setFirebaseLiveStatus(active
     ?'Live Database Mode: ON. Firestore is now the active source of truth. Local storage remains as a safety cache. Changes will auto-save to Firestore.'
     :'Live Database Mode: OFF. The app is using local storage as the active source of truth.',
@@ -2775,11 +2814,13 @@ async function pushFullLocalStateToFirestore(reason){
 
     const stamp=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     setFirebaseLiveStatus('Live Database Mode: saved to Firestore at '+stamp+'. Reason: '+(reason||'manual save')+'. Local storage remains as fallback.','#1A6B2A');
+    updateDatabaseModeIndicator('on','Database: ON');
     return true;
   }catch(e){
     const code=e?.code?(' ['+e.code+']') : '';
     setFirebaseLiveStatus('Live Database Mode save FAILED'+code+'. '+(e?.message||e)+'\n\nLocal storage still has your changes. Check Firebase sign-in/rules, then use “Save Local Data to Firestore Now.”','#8B1A1A');
     console.error('Live database save failed',e);
+    updateDatabaseModeIndicator('error','Database: Error');
     return false;
   }finally{
     qtLiveSyncInProgress=false;
@@ -2884,10 +2925,16 @@ async function loadAllFirestoreDataToLocalNoConfirm(){
   setFirebaseLiveStatus('Live Database Mode: Firestore data loaded into app. Local storage updated as fallback.','#1A6B2A');
 }
 
+
+window.addEventListener('DOMContentLoaded',()=>{
+  setTimeout(()=>updateDatabaseModeIndicator(),50);
+});
+
 window.addEventListener('qt-firebase-auth-changed',()=>{
   refreshFirebaseStatus(true);
   if(localStorage.getItem(QT_LIVE_DATABASE_ACTIVE_KEY)==='true' && !qtLiveDatabaseActive){
     qtLiveDatabaseActive=true;
+    updateDatabaseModeIndicator('on','Database: ON');
     setFirebaseLiveStatus('Live Database Mode: remembered as ON. Sign in/check teacher access, then changes will auto-save.','#7A5500');
   }
 });
