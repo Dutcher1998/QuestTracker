@@ -6010,10 +6010,37 @@ function initTeachingMode(){
 }
 
 /* ── FIRST RUN SETUP WIZARD ── */
-function checkFirstRun(){
-  // Show setup wizard if no students and no dismissed flag
+async function checkFirstRun(){
+  // Show setup wizard only after the database has had a chance to load.
+  // Fresh/incognito browsers start with empty localStorage, so opening the wizard
+  // immediately can be a false alarm before Firestore populates the roster.
   if(localStorage.getItem('dq_setup_done'))return;
   if(students.length>0){localStorage.setItem('dq_setup_done','1');return;}
+
+  // Approved teachers with Firebase should let Live Database Mode auto-start first.
+  // If Firestore has the database flag enabled, load it before deciding this is a new setup.
+  if(isT && window.QT_FIREBASE && window.QT_FIREBASE.ready && window.QT_FIREBASE.currentUser){
+    if(qtAutoStartLiveDatabaseInProgress){
+      setTimeout(()=>checkFirstRun(),1000);
+      return;
+    }
+    try{
+      const dbFlag=isDatabaseModeFlagOn() || await getDatabaseModeFlagFromFirestore();
+      if(dbFlag && !qtLiveDatabaseActive){
+        await autoStartLiveDatabaseModeIfReady('setup wizard check');
+        setTimeout(()=>checkFirstRun(),900);
+        return;
+      }
+      if(students.length>0 || qtLiveDatabaseActive){
+        if(students.length>0)localStorage.setItem('dq_setup_done','1');
+        return;
+      }
+    }catch(e){
+      console.warn('Setup wizard database check skipped:',e);
+      // Fall through to the normal new-user wizard only if no roster is available.
+    }
+  }
+
   openSetupWizard();
 }
 
