@@ -4742,7 +4742,38 @@ function touchSession(){
   if(curUser)saveSession();
 }
 
-function signIn(){if(typeof google==='undefined'){loadGS(()=>initGA(true));}else{initGA(true);}}
+async function signIn(){
+  // Preferred path: one click signs into Firebase and Quest Tracker together.
+  // Google Classroom sync will still request Classroom permissions separately only when needed.
+  if(window.QT_FIREBASE&&window.QT_FIREBASE.ready){
+    try{
+      const fb=getFirebaseObjects();
+      showEB('Signing in with Google and Firebase...');
+      const result=await fb.sdk.signInWithPopup(fb.auth,fb.googleProvider);
+      const u=result.user;
+      fb.currentUser=u;
+      curUser={
+        name:u.displayName||u.email||'Google User',
+        email:u.email||'',
+        picture:u.photoURL||'',
+        googleId:u.uid||''
+      };
+      isT=isTeacherEmail(curUser.email);
+      completeSignIn();
+      refreshFirebaseStatus(true);
+      if(isT){
+        setTimeout(()=>autoStartLiveDatabaseModeIfReady('unified Quest Tracker sign-in'),600);
+      }
+      hideEB();
+      return;
+    }catch(e){
+      const code=e?.code?(' ['+e.code+']') : '';
+      showEB('Firebase sign-in failed'+code+'. Falling back to regular Google sign-in.');
+      console.warn('Unified Firebase sign-in failed; falling back to Google Identity Services.',e);
+    }
+  }
+  if(typeof google==='undefined'){loadGS(()=>initGA(true));}else{initGA(true);}
+}
 function loadGS(cb){const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=cb;document.head.appendChild(s);}
 function initGA(auto){
   google.accounts.id.initialize({
@@ -4782,6 +4813,11 @@ function handleCred(resp){
   curUser={name:pl.name,email:pl.email,picture:pl.picture,googleId:pl.sub};
   isT=isTeacherEmail(pl.email);
   completeSignIn();
+  // Fallback Google Identity sign-in does not automatically authenticate Firebase.
+  // Give teachers a clear next step instead of silently staying in Local mode.
+  if(isT&&window.QT_FIREBASE&&window.QT_FIREBASE.ready&&!window.QT_FIREBASE.currentUser){
+    setFirebaseLiveStatus('Quest Tracker sign-in succeeded, but Firebase is not signed in yet. Click “Sign in with Firebase” in Settings to use Live Database Mode.','#7A5500');
+  }
 }
 function parseJWT(t){try{return JSON.parse(atob(t.split('.')[1]));}catch(e){return{};}}
 function completeSignIn(){
@@ -4829,7 +4865,18 @@ function demoMode(){
   if(!students.length)students=DEMOS.map((d,i)=>mkS(d.name,i,d.cls));
   completeSignIn();
 }
-function signOut(){curUser=null;isT=false;curSid=null;document.getElementById('SS').style.display='flex';document.getElementById('app').style.display='none';}
+async function signOut(){
+  try{
+    if(window.QT_FIREBASE&&window.QT_FIREBASE.ready&&window.QT_FIREBASE.currentUser){
+      await window.QT_FIREBASE.sdk.firebaseSignOut(window.QT_FIREBASE.auth);
+      window.QT_FIREBASE.currentUser=null;
+    }
+  }catch(e){console.warn('Firebase sign-out warning:',e);}
+  curUser=null;isT=false;curSid=null;
+  markLiveDatabaseModeActive(false);
+  document.getElementById('SS').style.display='flex';
+  document.getElementById('app').style.display='none';
+}
 
 /* GOOGLE CLASSROOM SYNC — PICKER BASED */
 let allCourses=[];let syncSelected=new Set();
