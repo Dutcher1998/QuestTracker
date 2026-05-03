@@ -2233,6 +2233,8 @@ let qtLiveDatabaseActive=false;
 let qtLiveSyncTimer=null;
 let qtLiveSyncInProgress=false;
 let qtLivePendingReason='';
+let qtAutoStartLiveDatabaseInProgress=false;
+let qtSuppressLiveAutoSave=false;
 
 function setFirebaseFullSyncStatus(msg,color){
   const el=document.getElementById('firebase-fullsync-status');
@@ -2833,7 +2835,9 @@ async function pushFullLocalStateToFirestore(reason){
 }
 
 function scheduleLiveDatabaseSave(reason,delay){
-  if(!isLiveDatabaseModeActive())return;
+  // Only auto-save after Live Database Mode has deliberately started in this page session.
+  // The remembered localStorage flag is used for auto-start, but should not trigger saves before Firestore loads.
+  if(!qtLiveDatabaseActive || qtSuppressLiveAutoSave)return;
   if(qtLiveSyncTimer)clearTimeout(qtLiveSyncTimer);
   const wait=typeof delay==='number'?delay:4500;
   setFirebaseLiveStatus('Live Database Mode: local change detected. Auto-saving to Firestore soon...\nReason: '+(reason||'data changed'),'#7A5500');
@@ -2875,6 +2879,7 @@ function stopLiveDatabaseMode(){
 
 async function loadAllFirestoreDataToLocalNoConfirm(){
   const fb=getFirebaseObjects();
+  qtSuppressLiveAutoSave=true;
   setFirebaseLiveStatus('Live Database Mode: loading Firestore data into app...','#7A5500');
   const settingsSnap=await fb.sdk.getDoc(fb.sdk.doc(fb.db,'settings','global'));
   if(settingsSnap.exists())applyGlobalSettingsObject(settingsSnap.data());
@@ -2922,21 +2927,62 @@ async function loadAllFirestoreDataToLocalNoConfirm(){
   }
   sanitizeStoredGradeDetails();
   save();saveAttendance();syncPCState();render();renderAttendance();renderParticipationSetup();
+  qtSuppressLiveAutoSave=false;
   setFirebaseLiveStatus('Live Database Mode: Firestore data loaded into app. Local storage updated as fallback.','#1A6B2A');
 }
 
+async function autoStartLiveDatabaseModeIfReady(trigger){
+  if(qtAutoStartLiveDatabaseInProgress || qtLiveDatabaseActive)return;
+  if(!isDatabaseModeFlagOn()){
+    updateDatabaseModeIndicator('off','Database: Local');
+    return;
+  }
+  let fb;
+  try{fb=getFirebaseObjects();}
+  catch(e){return;}
+  if(!fb.currentUser){
+    updateDatabaseModeIndicator('ready','Database: Ready');
+    setFirebaseLiveStatus('Live Database Mode: database flag is enabled. Sign in with Firebase to auto-start database mode.','#7A5500');
+    return;
+  }
+  try{
+    qtAutoStartLiveDatabaseInProgress=true;
+    setFirebaseLiveStatus('Live Database Mode: auto-starting from Firestore... '+(trigger||''),'#7A5500');
+    await ensureApprovedFirebaseTeacher();
+    await loadAllFirestoreDataToLocalNoConfirm();
+    markLiveDatabaseModeActive(true);
+    await fb.sdk.setDoc(fb.sdk.doc(fb.db,'databaseMeta','liveMode'),{
+      enabled:true,
+      liveSourceActive:true,
+      autoStartEnabled:true,
+      lastAutoStartedAt:fb.sdk.serverTimestamp(),
+      lastAutoStartedBy:fb.currentUser?.email||null,
+      localFallbackEnabled:true
+    },{merge:true});
+    setFirebaseLiveStatus('Live Database Mode: auto-started. Firestore loaded first, then live auto-save was enabled. Local storage remains as fallback.','#1A6B2A');
+    showEB('Live Database Mode auto-started from Firestore.');
+  }catch(e){
+    qtSuppressLiveAutoSave=false;
+    const code=e?.code?(' ['+e.code+']') : '';
+    setFirebaseLiveStatus('Live Database Mode auto-start FAILED'+code+'. '+(e?.message||e)+'\n\nThe app is staying on local storage fallback until you manually start Live Database Mode.','#8B1A1A');
+    updateDatabaseModeIndicator('error','Database: Error');
+  }finally{
+    qtAutoStartLiveDatabaseInProgress=false;
+  }
+}
 
 window.addEventListener('DOMContentLoaded',()=>{
   setTimeout(()=>updateDatabaseModeIndicator(),50);
+  setTimeout(()=>autoStartLiveDatabaseModeIfReady('page loaded'),900);
+});
+
+window.addEventListener('qt-firebase-ready',()=>{
+  setTimeout(()=>autoStartLiveDatabaseModeIfReady('Firebase ready'),700);
 });
 
 window.addEventListener('qt-firebase-auth-changed',()=>{
   refreshFirebaseStatus(true);
-  if(localStorage.getItem(QT_LIVE_DATABASE_ACTIVE_KEY)==='true' && !qtLiveDatabaseActive){
-    qtLiveDatabaseActive=true;
-    updateDatabaseModeIndicator('on','Database: ON');
-    setFirebaseLiveStatus('Live Database Mode: remembered as ON. Sign in/check teacher access, then changes will auto-save.','#7A5500');
-  }
+  setTimeout(()=>autoStartLiveDatabaseModeIfReady('Firebase sign-in detected'),500);
 });
 
 function getTeacherEmails(){return[];}// No longer used for access control
