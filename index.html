@@ -2758,6 +2758,18 @@ function isDatabaseModeFlagOn(){
   return localStorage.getItem(QT_DATABASE_MODE_KEY)==='true';
 }
 
+
+async function getDatabaseModeFlagFromFirestore(){
+  // Fresh browsers/incognito windows do not have the local Database Mode flag yet.
+  // In that case, the app must ask Firestore whether database mode is enabled.
+  const fb=getFirebaseObjects();
+  if(!fb.currentUser)return false;
+  const snap=await fb.sdk.getDoc(fb.sdk.doc(fb.db,'databaseMeta','liveMode'));
+  const enabled=snap.exists() && snap.data()?.enabled===true;
+  if(enabled)localStorage.setItem(QT_DATABASE_MODE_KEY,'true');
+  return enabled;
+}
+
 function isLiveDatabaseModeActive(){
   return qtLiveDatabaseActive===true || localStorage.getItem(QT_LIVE_DATABASE_ACTIVE_KEY)==='true';
 }
@@ -2933,22 +2945,36 @@ async function loadAllFirestoreDataToLocalNoConfirm(){
 
 async function autoStartLiveDatabaseModeIfReady(trigger){
   if(qtAutoStartLiveDatabaseInProgress || qtLiveDatabaseActive)return;
-  if(!isDatabaseModeFlagOn()){
+  let fb;
+  try{fb=getFirebaseObjects();}
+  catch(e){
     updateDatabaseModeIndicator('off','Database: Local');
     return;
   }
-  let fb;
-  try{fb=getFirebaseObjects();}
-  catch(e){return;}
   if(!fb.currentUser){
-    updateDatabaseModeIndicator('ready','Database: Ready');
-    setFirebaseLiveStatus('Live Database Mode: database flag is enabled. Sign in with Firebase to auto-start database mode.','#7A5500');
+    if(isDatabaseModeFlagOn()){
+      updateDatabaseModeIndicator('ready','Database: Ready');
+      setFirebaseLiveStatus('Live Database Mode: database flag is enabled locally. Sign in with Firebase to auto-start database mode.','#7A5500');
+    }else{
+      updateDatabaseModeIndicator('off','Database: Local');
+      setFirebaseLiveStatus('Live Database Mode: waiting for Firebase sign-in. Fresh/incognito windows start in Local until Firestore confirms the database flag.','#7A5500');
+    }
     return;
   }
   try{
     qtAutoStartLiveDatabaseInProgress=true;
-    setFirebaseLiveStatus('Live Database Mode: auto-starting from Firestore... '+(trigger||''),'#7A5500');
+    setFirebaseLiveStatus('Live Database Mode: checking Firestore database flag... '+(trigger||''),'#7A5500');
     await ensureApprovedFirebaseTeacher();
+    const localFlag=isDatabaseModeFlagOn();
+    const firestoreFlag=localFlag ? true : await getDatabaseModeFlagFromFirestore();
+    if(!firestoreFlag){
+      localStorage.setItem(QT_DATABASE_MODE_KEY,'false');
+      updateDatabaseModeIndicator('off','Database: Local');
+      setFirebaseLiveStatus('Live Database Mode: Firestore database flag is not enabled. Staying on local storage fallback.','#7A5500');
+      return;
+    }
+    updateDatabaseModeIndicator('ready','Database: Ready');
+    setFirebaseLiveStatus('Live Database Mode: auto-starting from Firestore... '+(trigger||''),'#7A5500');
     await loadAllFirestoreDataToLocalNoConfirm();
     markLiveDatabaseModeActive(true);
     await fb.sdk.setDoc(fb.sdk.doc(fb.db,'databaseMeta','liveMode'),{
@@ -2959,7 +2985,7 @@ async function autoStartLiveDatabaseModeIfReady(trigger){
       lastAutoStartedBy:fb.currentUser?.email||null,
       localFallbackEnabled:true
     },{merge:true});
-    setFirebaseLiveStatus('Live Database Mode: auto-started. Firestore loaded first, then live auto-save was enabled. Local storage remains as fallback.','#1A6B2A');
+    setFirebaseLiveStatus('Live Database Mode: auto-started from Firestore. Fresh/incognito browser support is active. Local storage remains as fallback.','#1A6B2A');
     showEB('Live Database Mode auto-started from Firestore.');
   }catch(e){
     qtSuppressLiveAutoSave=false;
