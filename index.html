@@ -858,30 +858,30 @@ html,body{scroll-behavior:auto;}
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
           <div>
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Backup &amp; Restore</div>
-          <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Export all data as a JSON file. Import to restore on any device or after clearing browser storage.</div>
-          <div style="display:flex;gap:8px;margin-bottom:12px;">
-            <button class="btn bm bsm" onclick="exportBackup()">⬇️ Export Encrypted Backup</button>
-            <button class="btn bo bsm" onclick="importBackup()">⬆️ Import Backup</button>
-          </div>
+          <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Backup and restore controls have been moved to <strong>Advanced Developer Tools</strong> to keep the normal Settings page clean.</div>
 
           <hr style="border:none;border-top:1px solid var(--BDG);"/>
           <div>
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Database Status</div>
             <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Live Database Mode is the normal production mode. Firestore is the active database when this says <strong>Database: ON</strong>; local storage remains as a safety fallback.</div>
             <div id="prod-db-status" style="font-size:13px;color:var(--INK3);background:var(--GP);border:1px solid var(--BDG);border-radius:var(--R);padding:8px 10px;margin-bottom:8px;white-space:pre-wrap;">Database status: checking...</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-              <button class="btn bg bsm" onclick="pushFullLocalStateToFirestore('manual save from production settings')">💾 Save to Database Now</button>
-              <button class="btn bo bsm" onclick="loadAllFirestoreDataToLocal()">↻ Reload from Database</button>
-              <button class="btn bm bsm" onclick="exportBackup()">⬇️ Export Encrypted Backup</button>
-              <button class="btn bo bsm" onclick="importBackup()">⬆️ Import Backup</button>
-              <button class="btn bgold bsm" onclick="publishStudentFacingDataToFirestore()">Publish Student View Data</button>
-            </div>
-            <div style="font-size:12px;color:var(--INK3);line-height:1.5;">Use the advanced tools only if something breaks or you need to troubleshoot migration/data sync.</div>
+            <div style="font-size:12px;color:var(--INK3);line-height:1.5;">Manual database, backup, restore, and student-view publishing controls have been moved to <strong>Advanced Developer Tools</strong>.</div>
           </div>
 
           <details id="advanced-firebase-tools" style="margin-top:12px;border:1px solid var(--BDG);border-radius:var(--R);background:var(--W);padding:10px 12px;">
             <summary style="font-family:'Cinzel',serif;font-size:12px;color:var(--M);cursor:pointer;letter-spacing:.4px;">Advanced Developer Tools — Firebase setup, migration, and repair</summary>
             <div style="margin-top:10px;">
+              <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--BDG);">
+                <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Production maintenance tools</div>
+                <div style="font-size:12px;color:var(--INK3);margin-bottom:8px;">Use these only when you need to manually save, reload, back up, restore, or refresh the student-facing database view.</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                  <button class="btn bg bsm" onclick="pushFullLocalStateToFirestore('manual save from advanced developer tools')">💾 Save to Database Now</button>
+                  <button class="btn bo bsm" onclick="loadAllFirestoreDataToLocal()">↻ Reload from Database</button>
+                  <button class="btn bm bsm" onclick="exportBackup()">⬇️ Export Encrypted Backup</button>
+                  <button class="btn bo bsm" onclick="importBackup()">⬆️ Import Backup</button>
+                  <button class="btn bgold bsm" onclick="publishStudentFacingDataToFirestore()">Publish Student View Data</button>
+                </div>
+              </div>
           <div>
             <div style="font-size:13px;color:var(--INK);margin-bottom:6px;font-weight:500;">Firebase database prep</div>
             <div style="font-size:13px;color:var(--INK3);margin-bottom:8px;">Firebase is wired into this app. Migration is complete; Live Database Mode can now load from and auto-save to Firestore while keeping local storage as a fallback.</div>
